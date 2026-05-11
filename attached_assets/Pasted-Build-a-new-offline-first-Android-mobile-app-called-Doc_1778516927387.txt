@@ -1,0 +1,1180 @@
+Build a new offline-first Android mobile app called DocPocket.
+
+DocPocket is a private document vault + form assistant. It should help me store important files, personal info, official documents, form details, and document kits in one secure offline place.
+
+This app is NOT a normal file manager.
+This app is NOT a notes app.
+This app is NOT a cloud drive.
+
+Main idea:
+When I need to fill a visa form, school form, travel form, send my passport image, share a PDF, copy my phone number, copy my address, or collect required documents, I should open DocPocket and find/share/copy everything in seconds.
+
+The app must be:
+- offline only
+- local only
+- private
+- secure
+- fast
+- minimal
+- Android-first
+- APK-build ready
+- export/import capable
+- not laggy
+- not overloaded
+
+Do NOT add:
+- cloud sync
+- account/login server
+- ads
+- social features
+- backend
+- analytics
+- AI features
+- unnecessary heavy features
+
+==================================================
+APP NAME
+==================================================
+
+Name: DocPocket
+
+Android package:
+com.mekan.docpocket
+
+==================================================
+CORE NAVIGATION
+==================================================
+
+Bottom tabs:
+
+1. Vault
+2. Kits
+3. Info
+4. Settings
+
+Optional later:
+- Search tab
+
+For MVP, search can be inside Vault.
+
+==================================================
+MAIN DATA TYPES
+==================================================
+
+The app has 3 main data types:
+
+1. Files
+Examples:
+- passport image
+- passport PDF
+- visa PDF
+- flight ticket PDF
+- school certificate
+- consent form
+- transcript
+- ID photo
+- accommodation document
+- invitation letter
+- insurance document
+- medical document
+
+2. Info Cards
+Examples:
+- passport number
+- Korean phone number
+- international phone number
+- home address
+- school address
+- emergency contact
+- date of birth in different formats
+- email address
+- student ID
+- supervisor contact
+- school contact
+- accommodation address
+
+3. Kits
+A kit is a situation-based package of files + info + checklist.
+
+Examples:
+- Thailand Visa
+- School Submission
+- Flight / Airport
+- Scholarship Application
+- Exchange Program
+- Medical Visit
+- Bank / SIM Card
+- Dorm Documents
+
+The strongest feature:
+A kit should show all files and copyable fields needed for one situation on one screen.
+
+Example kit:
+
+Thailand Visa
+
+Files:
+Passport Scan        [Share]
+Flight Ticket        [Share]
+Invitation Letter    [Share]
+ID Photo             [Share]
+
+Info:
+Passport Number      [Copy]
+Phone Number         [Copy]
+Accommodation Addr   [Copy]
+Emergency Contact    [Copy]
+
+Checklist:
+[ ] Passport valid
+[ ] Photo correct size
+[ ] Flight ticket attached
+[ ] Accommodation confirmed
+[ ] Form submitted
+
+==================================================
+SECURITY REQUIREMENTS
+==================================================
+
+This app may store passport images and sensitive PDFs, so security is mandatory.
+
+Required:
+- PIN lock
+- optional biometric unlock
+- auto-lock after app goes background
+- auto-lock after inactivity
+- hide sensitive content on recent-apps preview if possible
+- local-only storage
+- no network calls
+- no analytics
+- no cloud backup
+- no third-party upload
+- warning before storing sensitive documents
+
+PIN:
+- user can set PIN on first launch or enable later
+- store PIN securely, not plaintext
+- use secure storage for PIN hash/auth data
+- allow changing PIN
+- allow disabling PIN only after entering current PIN
+
+Biometric:
+- biometric unlock is optional
+- PIN remains fallback
+
+Privacy Mode:
+- toggle to blur sensitive values and file previews
+- hide passport numbers partially by default, like A123****7
+- allow temporary reveal
+
+Clipboard safety:
+When copying sensitive info, offer:
+- clear clipboard after 60 seconds
+- show small notice: “Copied. Clipboard will clear soon.”
+
+Important:
+Do not commit or bundle any real documents in the GitHub repo.
+
+==================================================
+STORAGE REQUIREMENTS
+==================================================
+
+All files must be stored locally inside app private storage.
+
+Use if building with Expo React Native:
+- TypeScript
+- Expo Router
+- expo-document-picker
+- expo-image-picker
+- expo-file-system
+- expo-sharing
+- expo-clipboard
+- expo-local-authentication
+- expo-secure-store
+- AsyncStorage or SQLite for metadata
+
+Recommended:
+- SQLite or AsyncStorage for metadata
+- actual files stored in app document directory
+- metadata stores local file URI/path
+- do NOT store large file data/base64 in AsyncStorage
+
+File import:
+- choose file from device
+- copy file into app private storage
+- store metadata
+- app should still show file after restart
+
+==================================================
+VAULT TAB
+==================================================
+
+Vault is the main file storage area.
+
+Top:
+- title: Vault
+- search bar
+- quick filter chips:
+  All / Identity / Visa / Travel / School / Medical / Photos / PDFs / Recent / Favorites
+
+File cards show:
+- file icon or thumbnail
+- document name
+- category/tag
+- last updated date
+- file type badge: PDF / Image / DOC
+- expiry badge if relevant
+- action buttons:
+  Preview
+  Share
+  More
+
+Example:
+
+Passport Scan
+Identity • Image • Expiring Soon
+[Preview] [Share]
+
+Flight Ticket
+Travel • PDF
+[Preview] [Share]
+
+School Invitation
+School • PDF
+[Preview] [Share]
+
+Add button:
++ Add
+
+Add options:
+- Import file
+- Import from gallery
+- Take photo / scan
+- Create info card
+- Create kit
+
+When adding a file:
+Fields:
+- name
+- category/tag
+- document type
+- optional expiry date
+- optional note
+- optional requirements
+- optional add to kit
+- sensitive toggle
+- favorite toggle
+
+Supported file types:
+- PDF
+- JPG
+- PNG
+- HEIC if supported
+- DOC/DOCX optional
+- other files optional, but prioritize PDFs/images
+
+File actions:
+- preview
+- share/send
+- rename
+- change category
+- add tags
+- add note
+- add expiry date
+- add requirements
+- add to kit
+- duplicate optional
+- delete
+
+For files:
+“Copy” usually means share/send file through Android share sheet.
+For text fields:
+“Copy” means copy to clipboard.
+
+Preview:
+- images should preview inside app
+- PDFs can open with system viewer/share if in-app PDF rendering is too heavy
+- do not add heavy PDF rendering library in MVP unless necessary
+
+==================================================
+INFO TAB
+==================================================
+
+Info tab stores copyable personal information.
+
+Info cards:
+- title
+- value
+- category
+- tags
+- copy button
+- hidden/reveal option
+- favorite/pin option
+- format variants optional
+
+Examples:
+
+Korean Phone
+010-5570-4320
+[Copy]
+
+International Phone
++82 10-5570-4320
+[Copy]
+
+Passport Number
+A1234567
+[Copy]
+
+Birthday
+2007-09-06
+[Copy]
+
+Home Address
+Turkmenistan, Turkmenabat, ...
+[Copy]
+
+Emergency Contact
+Name + phone
+[Copy]
+
+Each info card supports:
+- add
+- edit
+- delete
+- copy
+- hide/reveal sensitive value
+- favorite/pin to top
+- add to kit
+
+Categories:
+- Identity
+- Contact
+- Address
+- School
+- Travel
+- Emergency
+- Custom
+
+Smart format converters:
+
+Phone number formatter:
+Input:
+01055704320
+
+Output variants:
+- 010-5570-4320
+- +82 10-5570-4320
+- +821055704320
+
+Date formatter:
+Input:
+2007-09-06
+
+Output:
+- 2007-09-06
+- 06 Sep 2007
+- September 6, 2007
+- 06/09/2007
+
+Address cards:
+Allow multiple address formats:
+- full address
+- short address
+- English-style
+- Korean-style if user enters one
+
+MVP does not need OCR or AI.
+Manual entry is enough.
+
+==================================================
+KITS TAB
+==================================================
+
+Kits are the core unique feature.
+
+A kit is a situation-based collection of:
+- files
+- info cards
+- checklist items
+- document requirements
+- notes
+
+Kit examples:
+- Thailand Visa
+- School Submission
+- Flight / Airport
+- Scholarship Application
+- Exchange Program
+- Medical Visit
+- Bank / SIM Card
+- Dorm Documents
+
+Kit list screen:
+Each kit card shows:
+- kit name
+- icon/color
+- progress: 6/8 ready
+- missing item count
+- last updated date
+
+Kit detail screen:
+
+Thailand Visa
+
+Progress:
+6 / 8 ready
+
+Missing:
+- Accommodation document
+- ID photo
+
+Files:
+Passport Scan        [Share]
+Flight Ticket        [Share]
+Invitation Letter    [Share]
+ID Photo             [Share]
+
+Info:
+Passport Number      [Copy]
+Phone Number         [Copy]
+Accommodation Addr   [Copy]
+Emergency Contact    [Copy]
+
+Checklist:
+[ ] Passport valid
+[ ] Photo correct size
+[ ] Flight ticket attached
+[ ] Accommodation confirmed
+[ ] Form submitted
+
+Requirements:
+Photo size: 3.5 x 4.5 cm
+Max file size: 2 MB
+File type: PDF/JPG
+Filename format: Passport_Mekan.pdf
+
+Kit actions:
+- add/remove files
+- add/remove info cards
+- add checklist item
+- mark checklist done
+- add requirements note
+- share individual file
+- copy individual info
+- share all selected files
+- duplicate kit
+- delete kit
+
+Kit progress:
+Calculate ready items / total items.
+
+Missing items detector:
+If a kit template expects certain things but they are missing, show:
+
+Missing:
+- Passport scan
+- Flight ticket
+- ID photo
+
+Submission package feature:
+Inside a kit, allow selecting multiple files and sharing them together.
+
+Example:
+Thailand Visa Package
+[x] Passport scan
+[x] Flight ticket
+[x] Invitation letter
+[x] ID photo
+
+[Share selected]
+[Share all]
+
+This should open Android share sheet with multiple files if supported.
+
+Kit templates:
+Include built-in templates that user can create and customize.
+
+Template 1: Visa Application
+Checklist:
+- passport scan
+- ID photo
+- flight ticket
+- accommodation info
+- invitation letter
+- emergency contact
+- travel insurance optional
+Requirements section:
+- photo size
+- max file size
+- accepted file types
+- filename format
+
+Template 2: School Submission
+Checklist:
+- document file
+- correct filename
+- deadline checked
+- email recipient checked
+- submitted
+
+Template 3: Travel
+Checklist:
+- passport
+- ticket
+- visa
+- accommodation
+- charger/adaptor
+- emergency contact
+- insurance
+
+Template 4: Scholarship/Application
+Checklist:
+- application form
+- recommendation letter
+- transcript
+- personal statement
+- evidence files
+
+==================================================
+DOCUMENT TOOLS
+==================================================
+
+Add useful document tools, but keep them lightweight.
+
+1. Filename generator
+
+One-tap rename suggestions:
+- Passport_Mekan_Jumakulyyev.pdf
+- FlightTicket_MWIT_2026.pdf
+- VisaPhoto_Mekan.jpg
+- ConsentForm_Mekan.pdf
+- Transcript_Mekan.pdf
+
+User should be able to:
+- generate name from document type + custom name/date
+- apply suggested name to file metadata
+- optionally rename exported/shared filename if possible
+
+2. File size reducer
+
+Useful because visa/school websites often reject large files.
+
+MVP:
+- compress image
+- resize image
+- convert image to PDF if practical
+- show original size and new size
+
+Examples:
+Compress image:
+Original: 5.2 MB
+Compressed: 1.1 MB
+
+If PDF compression is too heavy, add it to Version 2.
+
+3. Image to PDF
+
+Allow user to convert:
+passport image / ID photo / document photo
+into a PDF.
+
+4. Send-ready versions
+
+A document can have variants:
+- original
+- compressed
+- cropped
+- black-and-white
+- PDF version
+
+Example:
+Passport
+- Passport original.jpg
+- Passport compressed.jpg
+- Passport PDF.pdf
+
+Do not overcomplicate MVP.
+At least support original + compressed version for images.
+
+5. Document requirements notes
+
+For each file or kit, user can store:
+- required file type
+- max file size
+- photo size
+- filename rule
+- submission note
+
+Example:
+Photo size: 3.5 x 4.5 cm
+File type: JPG
+Max size: 2 MB
+
+==================================================
+RECENTLY USED
+==================================================
+
+Add a simple Recently Used section.
+
+Track:
+- recently opened
+- recently shared
+- recently copied
+
+Show in Vault top area or Settings:
+Recently Used:
+- Passport Scan
+- Korean Phone
+- Flight Ticket
+
+Keep this simple.
+
+==================================================
+EMERGENCY CARD
+==================================================
+
+Add optional Emergency Card.
+
+This is a special screen/card with essential information:
+
+- passport number
+- emergency contact
+- blood type optional
+- insurance info
+- school contact
+- home address
+- current address
+- medical notes optional
+
+Security:
+- requires unlock
+- sensitive fields hidden unless revealed
+
+This is optional but useful.
+
+==================================================
+EXPIRY TRACKER
+==================================================
+
+Documents can have expiry dates.
+
+Examples:
+- passport expiry
+- visa expiry
+- insurance expiry
+- certificate validity
+
+Badges:
+- Valid
+- Expiring soon
+- Expired
+
+Settings:
+- expiring soon threshold:
+  30 / 60 / 90 / 180 days
+
+No push notifications required for MVP.
+Just show badges inside app.
+
+Version 2:
+- local notifications
+
+==================================================
+SEARCH
+==================================================
+
+Search should work offline.
+
+Search across:
+- file names
+- tags
+- notes
+- info card titles
+- kit names
+- checklist items
+- requirements notes
+
+Group results:
+- Files
+- Info
+- Kits
+
+Do NOT search inside PDF contents in MVP.
+That is Version 2.
+
+==================================================
+BACKUP / IMPORT
+==================================================
+
+Backup is very important.
+
+Settings should include:
+- Export backup
+- Import backup
+- Last backup date
+- Storage used
+- Number of files
+- Number of info cards
+- Number of kits
+
+Because the app contains sensitive files, backup needs clear warnings.
+
+MVP backup:
+At minimum export metadata:
+- info cards
+- kit definitions
+- checklist states
+- file metadata
+- file names/categories/tags
+- settings
+
+Better backup:
+Export full backup including files.
+
+Preferred full backup format:
+docpocket_backup_YYYY-MM-DD.zip
+
+Inside:
+- manifest.json
+- files/
+
+manifest.json:
+{
+  "version": 1,
+  "exportedAt": "...",
+  "files": [],
+  "infoCards": [],
+  "kits": [],
+  "settings": {}
+}
+
+If ZIP is too complicated for MVP:
+- export metadata JSON first
+- add full ZIP backup in Version 2
+- allow sharing files individually
+
+Security:
+- warn user if backup includes sensitive documents
+- password-encrypted backup is preferred for Version 2
+- if backup is unencrypted, clearly label it as unencrypted
+
+Import:
+- choose backup file
+- validate version
+- preview counts:
+  files found
+  info cards found
+  kits found
+- ask confirmation before replacing current data
+- never partially import corrupted backup
+- if import fails, current data remains unchanged
+
+Import modes:
+- Replace current data for MVP
+- Merge later
+
+==================================================
+SETTINGS TAB
+==================================================
+
+Settings sections:
+
+1. Security
+- PIN lock on/off
+- Change PIN
+- Biometrics on/off
+- Auto-lock time:
+  immediately / 1 min / 5 min / 15 min
+- Privacy mode on/off
+- Hide app preview on recent apps if possible
+- Clear clipboard after copying sensitive info toggle
+
+2. Appearance
+- Theme: System / Light / Dark
+- Accent color optional
+
+3. Backup
+- Export backup
+- Import backup
+- Last backup date
+- Backup warning for sensitive files
+
+4. Storage
+- Files count
+- Info cards count
+- Kits count
+- Storage used
+- Clear cache if needed
+
+5. Expiry
+- expiry warning threshold:
+  30 / 60 / 90 / 180 days
+
+6. About
+- app version
+- local-only
+- no cloud
+
+7. Danger Zone
+- Delete all data
+- requires PIN confirmation
+
+==================================================
+DESIGN STYLE
+==================================================
+
+Design should be:
+- minimal
+- modern
+- practical
+- clean
+- fast
+- secure-looking
+- not crowded
+
+Use:
+- dark/light/system theme
+- clean cards
+- rounded corners
+- subtle shadows
+- good spacing
+- readable text
+- calm colors
+- clear copy/share buttons
+- clear sensitive/reveal behavior
+
+Suggested tabs:
+Vault | Kits | Info | Settings
+
+Color idea:
+- dark navy/gray background
+- cyan/blue accent
+
+Category colors:
+- Identity = blue
+- Visa = purple
+- Travel = green
+- School = orange
+- Medical = red
+
+Do not overuse colors.
+
+UX principles:
+- one-tap copy
+- one-tap share
+- quick search
+- no deep menus for common actions
+- sensitive values hidden by default if privacy mode is on
+- kits show everything needed on one screen
+
+==================================================
+DATA MODEL
+==================================================
+
+DocumentFile:
+- id
+- name
+- originalFileName
+- localUri
+- mimeType
+- sizeBytes
+- category
+- tags[]
+- note
+- requirementsNote
+- expiryDate optional
+- createdAt
+- updatedAt
+- lastOpenedAt optional
+- lastSharedAt optional
+- isFavorite
+- isSensitive
+- variants[]
+
+FileVariant:
+- id
+- parentFileId
+- name
+- localUri
+- mimeType
+- sizeBytes
+- variantType:
+  original / compressed / cropped / pdf / blackWhite
+- createdAt
+
+InfoCard:
+- id
+- title
+- value
+- category
+- tags[]
+- isSensitive
+- isFavorite
+- formatVariants optional
+- createdAt
+- updatedAt
+- lastCopiedAt optional
+
+Kit:
+- id
+- name
+- color
+- icon
+- fileIds[]
+- infoCardIds[]
+- checklistItems[]
+- requirementsNote
+- note
+- expectedItems[]
+- createdAt
+- updatedAt
+
+ChecklistItem:
+- id
+- text
+- isDone
+- linkedFileId optional
+- linkedInfoCardId optional
+
+ExpectedItem:
+- id
+- title
+- type: file / info / checklist
+- linkedFileId optional
+- linkedInfoCardId optional
+- isRequired
+
+Settings:
+- themePreference: system/light/dark
+- pinEnabled
+- biometricEnabled
+- privacyMode
+- autoLockMinutes
+- clearClipboardAfterSeconds
+- expiryWarningDays
+- lastBackupDate
+
+AppLock:
+- store PIN hash securely
+- never store plaintext PIN
+
+RecentlyUsed:
+- id
+- itemType: file / info / kit
+- itemId
+- action: opened / shared / copied
+- timestamp
+
+==================================================
+PERFORMANCE REQUIREMENTS
+==================================================
+
+The app must not be laggy.
+
+Rules:
+- do not load large files into memory unnecessarily
+- do not store base64 files in AsyncStorage
+- copy files into app storage and store URI/path
+- generate thumbnails only for images if lightweight
+- lazy-load previews
+- search metadata only in MVP
+- avoid heavy OCR/PDF libraries in MVP
+- keep animations subtle
+- large file import/export shows loading state
+- lists remain smooth
+- use memoization where useful
+- do not use cloud/network
+- no background heavy work unless necessary
+
+==================================================
+MVP REQUIREMENTS
+==================================================
+
+MVP must include:
+
+1. Vault tab
+2. Add/import PDF/image files
+3. Store files locally inside app storage
+4. Preview images
+5. Open/share PDFs using system viewer/share sheet
+6. Rename/delete files
+7. Categories/tags
+8. Expiry date badge
+9. Requirements notes
+10. Info tab
+11. Add/edit/delete info cards
+12. One-tap copy
+13. Sensitive hide/reveal
+14. Clear sensitive clipboard after 60 seconds
+15. Kits tab
+16. Create/edit/delete kits
+17. Add files and info cards to kits
+18. Kit checklist
+19. Missing items detector
+20. Submission package: share selected/multiple files from kit
+21. One-tap share files from kit
+22. One-tap copy info from kit
+23. Filename generator
+24. Basic image compression/resize if practical
+25. Image to PDF if practical
+26. Recently used
+27. Settings tab
+28. PIN lock
+29. Optional biometric unlock
+30. Auto-lock
+31. Privacy mode
+32. Light/dark/system theme
+33. Export/import metadata backup
+34. APK build setup for Android
+
+MVP should NOT include:
+- OCR
+- search inside PDF
+- cloud sync
+- AI
+- heavy PDF rendering
+- full encrypted ZIP backup unless simple and stable
+
+==================================================
+VERSION 2 FEATURES
+==================================================
+
+Add later:
+
+1. Full backup ZIP including files
+2. Password-encrypted backup
+3. Document expiry local notifications
+4. Better document scan/crop
+5. OCR for extracting text from images
+6. Search inside document text
+7. PDF compression
+8. Multiple profiles
+9. Custom kit templates
+10. File compression improvements
+11. Watermark/resize before sharing
+12. In-app PDF preview
+13. Smart form autofill helper
+
+==================================================
+ANDROID / EXPO BUILD
+==================================================
+
+Prepare Android APK build.
+
+If using Expo:
+
+app.json:
+- name: DocPocket
+- slug: docpocket
+- android package: com.mekan.docpocket
+- versionCode: 1
+- userInterfaceStyle: automatic
+
+Create eas.json:
+
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  }
+}
+
+Preview profile should build APK for direct Android installation.
+
+==================================================
+TESTING CHECKLIST
+==================================================
+
+Security:
+- set PIN
+- unlock with PIN
+- wrong PIN fails
+- biometric unlock works if available
+- app auto-locks
+- sensitive info hidden in privacy mode
+- clipboard clears after copying sensitive info
+
+Vault:
+- import PDF
+- import image
+- take/import photo
+- file is copied into app storage
+- file appears after app restart
+- preview image
+- share PDF
+- rename file
+- delete file
+- search file
+- expiry badge works
+
+Info:
+- create phone number card
+- copy value
+- clipboard clears if sensitive
+- hide/reveal value
+- edit/delete card
+- favorite card
+- add info card to kit
+
+Kits:
+- create Thailand Visa kit
+- add passport file
+- add phone number info card
+- add checklist item
+- add requirements note
+- missing items detected
+- copy info from kit
+- share one file from kit
+- share multiple selected files from kit
+- progress updates
+
+Document tools:
+- generate filename
+- compress/resize image if implemented
+- convert image to PDF if implemented
+- create/send-ready variant if implemented
+
+Backup:
+- export metadata backup
+- import valid backup
+- invalid backup does not corrupt current data
+
+Theme:
+- light mode
+- dark mode
+- system mode
+
+Performance:
+- app opens quickly
+- file list scrolls smoothly
+- large file does not freeze UI
+- no unnecessary memory usage
+
+==================================================
+FINAL GOAL
+==================================================
+
+At the end I want a clean, secure, offline Android app where I can store important documents and personal info, then quickly copy or share exactly what I need for forms, visas, school submissions, travel, and official situations.
+
+The app should feel like:
+
+A private offline document command center.
+
+Not a file manager.
+Not a notes app.
+Not a cloud drive.
+
+A simple, fast, secure pocket vault for official life.
