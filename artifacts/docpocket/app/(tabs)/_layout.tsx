@@ -1,15 +1,15 @@
 import { Tabs } from "expo-router";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { BlurView } from "expo-blur";
-import { useColorScheme } from "react-native";
 import { useColors } from "@/hooks/useColors";
+import { useSettings } from "@/contexts/SettingsContext";
 
 export default function TabLayout() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { effectiveTheme } = useSettings();
+  const isDark = effectiveTheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
@@ -49,36 +49,28 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Vault",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="folder-open" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="folder-open" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="kits"
         options={{
           title: "Kits",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="briefcase" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="briefcase" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="info"
         options={{
           title: "Info",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="card" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="card" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: "Settings",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
+          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
         }}
       />
     </Tabs>

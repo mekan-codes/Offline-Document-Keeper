@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 import type { DocumentFile, InfoCard, Kit, AppSettings, ChecklistItem } from '@/types';
 
 const KEYS = {
@@ -161,6 +162,7 @@ export async function exportBackup(): Promise<string> {
   return JSON.stringify({
     version: 1,
     exportedAt: new Date().toISOString(),
+    note: 'This backup contains metadata only. Physical files are not included.',
     files,
     infoCards,
     kits,
@@ -168,17 +170,55 @@ export async function exportBackup(): Promise<string> {
   }, null, 2);
 }
 
-export async function importBackup(json: string): Promise<{ files: number; infoCards: number; kits: number }> {
+export interface BackupPreview {
+  fileCount: number;
+  infoCardCount: number;
+  kitCount: number;
+  exportedAt: string;
+  hasSettings: boolean;
+}
+
+export async function previewBackup(json: string): Promise<BackupPreview> {
+  const data = JSON.parse(json);
+  if (!data.version || !Array.isArray(data.files)) throw new Error('Invalid backup format');
+  return {
+    fileCount: Array.isArray(data.files) ? data.files.length : 0,
+    infoCardCount: Array.isArray(data.infoCards) ? data.infoCards.length : 0,
+    kitCount: Array.isArray(data.kits) ? data.kits.length : 0,
+    exportedAt: data.exportedAt || 'Unknown',
+    hasSettings: Boolean(data.settings),
+  };
+}
+
+export async function importBackup(json: string): Promise<BackupPreview> {
   const data = JSON.parse(json);
   if (!data.version || !Array.isArray(data.files)) throw new Error('Invalid backup format');
   await Promise.all([
     saveFiles(data.files || []),
     saveInfoCards(data.infoCards || []),
     saveKits(data.kits || []),
+    data.settings ? saveSettings({ ...DEFAULT_SETTINGS, ...data.settings }) : Promise.resolve(),
   ]);
-  return { files: data.files.length, infoCards: data.infoCards.length, kits: data.kits.length };
+  return {
+    fileCount: data.files.length,
+    infoCardCount: (data.infoCards || []).length,
+    kitCount: (data.kits || []).length,
+    exportedAt: data.exportedAt || '',
+    hasSettings: Boolean(data.settings),
+  };
 }
 
-export async function clearAllData(): Promise<void> {
+// ─── Delete All ───────────────────────────────────────────────────────────────
+
+export async function clearAllData(deletePhysicalFiles = true): Promise<void> {
+  if (deletePhysicalFiles) {
+    try {
+      const dir = (FileSystem as any).documentDirectory + 'docpocket/';
+      const info = await FileSystem.getInfoAsync(dir);
+      if (info.exists) {
+        await FileSystem.deleteAsync(dir, { idempotent: true });
+      }
+    } catch {}
+  }
   await AsyncStorage.multiRemove([KEYS.FILES, KEYS.INFO_CARDS, KEYS.KITS, KEYS.SETTINGS]);
 }

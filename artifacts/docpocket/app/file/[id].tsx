@@ -30,10 +30,12 @@ export default function FileDetailScreen() {
   const [editCategory, setEditCategory] = useState<FileCategory>(file?.category || 'other');
   const [compressing, setCompressing] = useState(false);
 
+  const s = styles(colors, colors.radius);
+
   if (!file) {
     return (
-      <View style={[s(colors, colors.radius).container, { paddingTop: insets.top }]}>
-        <TouchableOpacity style={s(colors, colors.radius).back} onPress={() => router.back()}>
+      <View style={[s.container, { paddingTop: insets.top }]}>
+        <TouchableOpacity style={s.back} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={{ color: colors.foreground, textAlign: 'center', marginTop: 40 }}>File not found</Text>
@@ -89,7 +91,7 @@ export default function FileDetailScreen() {
         [{ resize: { width: 1200 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
       );
-      const dir = FileSystem.documentDirectory + 'docpocket/';
+      const dir = (FileSystem as any).documentDirectory + 'docpocket/';
       const destUri = dir + `compressed_${Date.now()}.jpg`;
       await FileSystem.copyAsync({ from: result.uri, to: destUri });
       const info = await FileSystem.getInfoAsync(destUri);
@@ -108,8 +110,6 @@ export default function FileDetailScreen() {
   };
 
   const CATEGORIES: FileCategory[] = ['identity', 'visa', 'travel', 'school', 'medical', 'photos', 'other'];
-
-  const s = styles(colors, colors.radius);
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>

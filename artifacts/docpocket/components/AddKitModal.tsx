@@ -7,14 +7,87 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useKits } from '@/contexts/KitsContext';
 import { KIT_COLORS, KIT_ICON_NAMES } from '@/constants/categories';
-import type { Kit } from '@/types';
+import { makeChecklistItem } from '@/storage/db';
 
-const KIT_TEMPLATES = [
-  { name: 'Visa Application', icon: 'airplane', color: '#8B5CF6' },
-  { name: 'School Submission', icon: 'school', color: '#F59E0B' },
-  { name: 'Travel / Airport', icon: 'airplane', color: '#10B981' },
-  { name: 'Scholarship', icon: 'document-text', color: '#3B82F6' },
-  { name: 'Medical Visit', icon: 'medkit', color: '#EF4444' },
+interface Template {
+  name: string;
+  icon: string;
+  color: string;
+  checklistItems: string[];
+  requirementsNote: string;
+}
+
+const TEMPLATES: Template[] = [
+  {
+    name: 'Visa Application',
+    icon: 'airplane',
+    color: '#8B5CF6',
+    checklistItems: [
+      'Passport scan added',
+      'ID photo (white background) added',
+      'Flight ticket added',
+      'Accommodation info added',
+      'Invitation letter added',
+      'Emergency contact noted',
+      'Form submitted',
+    ],
+    requirementsNote: 'Photo size: ___\nMax file size: ___\nAccepted formats: PDF, JPEG\nFilename rules: ___\nSubmission deadline: ___',
+  },
+  {
+    name: 'School Submission',
+    icon: 'school',
+    color: '#F59E0B',
+    checklistItems: [
+      'Required files attached',
+      'Correct filename format used',
+      'Deadline checked',
+      'Recipient email confirmed',
+      'Submitted and confirmation received',
+    ],
+    requirementsNote: 'Filename format: ___\nDeadline: ___\nRecipient email: ___\nAccepted file type: ___',
+  },
+  {
+    name: 'Travel / Airport',
+    icon: 'airplane',
+    color: '#10B981',
+    checklistItems: [
+      'Passport',
+      'Flight ticket',
+      'Visa / entry document',
+      'Accommodation booking',
+      'Charger & adaptor',
+      'Emergency contact info',
+      'Travel insurance',
+    ],
+    requirementsNote: '',
+  },
+  {
+    name: 'Scholarship / Application',
+    icon: 'document-text',
+    color: '#3B82F6',
+    checklistItems: [
+      'Application form completed',
+      'Recommendation letter added',
+      'Academic transcript added',
+      'Personal statement written',
+      'Evidence files added',
+      'Submitted before deadline',
+    ],
+    requirementsNote: 'Deadline: ___\nSubmission portal: ___\nRequired documents: ___',
+  },
+  {
+    name: 'Medical Visit',
+    icon: 'medkit',
+    color: '#EF4444',
+    checklistItems: [
+      'Passport / ID ready',
+      'Insurance card ready',
+      'Appointment info noted',
+      'Medical history / notes prepared',
+      'Payment method ready',
+    ],
+    requirementsNote: 'Hospital / clinic: ___\nAppointment date: ___\nInsurance: ___',
+  },
 ];
 
 interface AddKitModalProps {
@@ -31,20 +104,35 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
   const [color, setColor] = useState(KIT_COLORS[0]);
   const [icon, setIcon] = useState(KIT_ICON_NAMES[0]);
   const [saving, setSaving] = useState(false);
+  const [appliedTemplate, setAppliedTemplate] = useState<Template | null>(null);
 
   useEffect(() => {
-    if (visible) { setName(''); setColor(KIT_COLORS[0]); setIcon(KIT_ICON_NAMES[0]); }
+    if (visible) {
+      setName(''); setColor(KIT_COLORS[0]); setIcon(KIT_ICON_NAMES[0]); setAppliedTemplate(null);
+    }
   }, [visible]);
 
-  const applyTemplate = (t: typeof KIT_TEMPLATES[0]) => {
-    setName(t.name); setColor(t.color); setIcon(t.icon);
+  const applyTemplate = (t: Template) => {
+    setName(t.name); setColor(t.color); setIcon(t.icon); setAppliedTemplate(t);
   };
 
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Required', 'Enter a kit name'); return; }
     setSaving(true);
     try {
-      await addNewKit({ name: name.trim(), color, icon, fileIds: [], infoCardIds: [], checklistItems: [], requirementsNote: '', note: '' });
+      const checklistItems = appliedTemplate
+        ? appliedTemplate.checklistItems.map(text => makeChecklistItem(text))
+        : [];
+      await addNewKit({
+        name: name.trim(),
+        color,
+        icon,
+        fileIds: [],
+        infoCardIds: [],
+        checklistItems,
+        requirementsNote: appliedTemplate?.requirementsNote ?? '',
+        note: '',
+      });
       onClose();
     } finally { setSaving(false); }
   };
@@ -67,6 +155,14 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
             <View style={[s.previewIcon, { backgroundColor: color + '22' }]}>
               <Ionicons name={icon as any} size={36} color={color} />
             </View>
+            {appliedTemplate && (
+              <View style={[s.templateBadge, { backgroundColor: color + '20' }]}>
+                <Ionicons name="checkmark-circle" size={12} color={color} />
+                <Text style={[s.templateBadgeText, { color }]}>
+                  Template: {appliedTemplate.checklistItems.length} checklist items
+                </Text>
+              </View>
+            )}
           </View>
 
           <Text style={s.label}>Name *</Text>
@@ -74,27 +170,36 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
             value={name} onChangeText={setName} placeholder="e.g. Thailand Visa, School Submission"
             placeholderTextColor={colors.mutedForeground} />
 
-          <Text style={s.label}>Templates</Text>
+          <Text style={s.label}>Quick Templates</Text>
+          <Text style={s.labelSub}>Select a template to pre-fill checklist and requirements</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.templateRow}>
-            {KIT_TEMPLATES.map((t, i) => (
-              <TouchableOpacity key={i} style={[s.templateChip, { borderColor: colors.border }]} onPress={() => applyTemplate(t)}>
-                <Ionicons name={t.icon as any} size={16} color={t.color} />
-                <Text style={[s.templateText, { color: colors.foreground }]}>{t.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {TEMPLATES.map((t, i) => {
+              const isActive = appliedTemplate?.name === t.name;
+              return (
+                <TouchableOpacity key={i}
+                  style={[s.templateChip, { borderColor: isActive ? t.color : colors.border, backgroundColor: isActive ? t.color + '15' : colors.muted }]}
+                  onPress={() => applyTemplate(t)}>
+                  <Ionicons name={t.icon as any} size={14} color={t.color} />
+                  <Text style={[s.templateText, { color: isActive ? t.color : colors.foreground }]}>{t.name}</Text>
+                  {isActive && <Ionicons name="checkmark-circle" size={14} color={t.color} />}
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
 
           <Text style={s.label}>Color</Text>
           <View style={s.colorRow}>
             {KIT_COLORS.map(c => (
-              <TouchableOpacity key={c} style={[s.colorDot, { backgroundColor: c }, c === color && s.colorDotActive]} onPress={() => setColor(c)} />
+              <TouchableOpacity key={c} style={[s.colorDot, { backgroundColor: c }, c === color && s.colorDotActive]}
+                onPress={() => setColor(c)} />
             ))}
           </View>
 
           <Text style={s.label}>Icon</Text>
           <View style={s.iconGrid}>
             {KIT_ICON_NAMES.map(ic => (
-              <TouchableOpacity key={ic} style={[s.iconOpt, { backgroundColor: icon === ic ? color + '20' : colors.muted, borderColor: icon === ic ? color : colors.border }]}
+              <TouchableOpacity key={ic}
+                style={[s.iconOpt, { backgroundColor: icon === ic ? color + '20' : colors.muted, borderColor: icon === ic ? color : colors.border }]}
                 onPress={() => setIcon(ic)}>
                 <Ionicons name={ic as any} size={22} color={icon === ic ? color : colors.mutedForeground} />
               </TouchableOpacity>
@@ -114,12 +219,15 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   headerTitle: { fontSize: 17, fontWeight: '600', color: colors.foreground, fontFamily: 'Inter_600SemiBold' },
   saveBtn: { fontSize: 16, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
   form: { flex: 1, padding: 20 },
-  preview: { alignItems: 'center', marginBottom: 8, marginTop: 8 },
+  preview: { alignItems: 'center', marginBottom: 8, marginTop: 8, gap: 8 },
   previewIcon: { width: 80, height: 80, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginBottom: 6, marginTop: 16 },
+  templateBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  templateBadgeText: { fontSize: 12, fontFamily: 'Inter_500Medium' },
+  label: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginBottom: 4, marginTop: 16 },
+  labelSub: { fontSize: 12, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', marginBottom: 8 },
   input: { borderWidth: 1, borderRadius: radius, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, fontFamily: 'Inter_400Regular', backgroundColor: colors.card },
   templateRow: { gap: 8, paddingVertical: 4 },
-  templateChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, backgroundColor: colors.muted },
+  templateChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1 },
   templateText: { fontSize: 12, fontWeight: '500', fontFamily: 'Inter_500Medium' },
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   colorDot: { width: 36, height: 36, borderRadius: 18 },

@@ -1,0 +1,782 @@
+Use this prompt in Codex.
+
+```text
+You are working on my existing GitHub repo:
+
+https://github.com/mekan-codes/Offline-Document-Keeper.git
+
+The app is called DocPocket. It is an offline document vault + info card + kit app.
+
+Current problem:
+The app exists, but many features are not actually working or are inconvenient. I want you to fix bugs, make the app usable, improve security behavior, and redesign the flow so it feels like a real private document vault.
+
+Do NOT rebuild from scratch unless absolutely necessary.
+Fix the existing app carefully.
+
+Important:
+- Keep it fully offline.
+- No cloud.
+- No login server.
+- No ads.
+- No analytics.
+- No backend.
+- No unnecessary heavy features.
+- Keep it fast and minimal.
+- Android-first.
+- Use pnpm workspace structure.
+- The app is inside artifacts/docpocket/.
+
+==================================================
+MAIN FIX GOAL
+==================================================
+
+Make DocPocket actually usable for:
+
+1. Storing document files locally
+2. Opening/previewing files
+3. Sharing files
+4. Storing copyable info cards
+5. Hiding sensitive values properly
+6. Creating useful kits
+7. Adding files/info to kits
+8. Making templates actually useful
+9. Fixing light/dark/system theme
+10. Fixing backup/import limitations
+11. Improving the UI design
+12. Adding a hidden/private vault flow for sensitive files
+
+==================================================
+1. FIX THEME SYSTEM
+==================================================
+
+Current bug:
+Theme setting does not properly affect the app. The app reads system theme directly in places instead of using saved themePreference/effectiveTheme.
+
+Fix:
+- Theme setting must work:
+  - System
+  - Light
+  - Dark
+
+Requirements:
+- Settings should save themePreference.
+- effectiveTheme should be the single source of truth.
+- useColors() must use effectiveTheme from SettingsContext, not useColorScheme directly.
+- Bottom tab layout must also use effectiveTheme, not useColorScheme directly.
+- All screens/components must update immediately when theme changes.
+- Dark mode should be clean and readable.
+- Light mode should stay clean.
+- System should follow phone theme.
+
+Important:
+Do not hardcode theme colors inside screens.
+Use central tokens from constants/colors.ts.
+
+Also change wording in Settings:
+Appearance
+Theme: System / Light / Dark
+
+==================================================
+2. FIX SENSITIVE VALUE BEHAVIOR
+==================================================
+
+Current bug:
+“Sensitive Value” feels broken. It only masks when Privacy Mode is enabled.
+
+Expected behavior:
+If an info card is marked as Sensitive Value:
+- it should be hidden/masked by default
+- user can tap reveal/eye icon to temporarily reveal it
+- copy button should still work
+- after reveal, allow hide again
+- sensitive values should look like:
+  A123••••67
+  or
+  ••••••••
+
+Privacy Mode behavior:
+Privacy Mode should be stronger:
+- hide all sensitive info cards by default
+- hide sensitive file previews
+- hide sensitive file names partially if enabled
+- hide sensitive values inside kit pages
+- require reveal action to view
+
+So:
+- Sensitive Value = this card is sensitive and hidden by default
+- Privacy Mode = stronger global hiding mode across the app
+
+Fix AddInfoModal:
+- The toggle should clearly say:
+  Sensitive
+  Hide this value until revealed
+
+Fix InfoCardItem:
+- if card.isSensitive, display masked value by default
+- tap eye icon reveals
+- tap eye-off hides
+- if copied, show “Copied”
+- if sensitive, clear clipboard after configured time
+
+==================================================
+3. ADD HIDDEN / PRIVATE VAULT FLOW
+==================================================
+
+I want a special hidden/private area for sensitive files and sensitive info.
+
+Concept:
+Like Samsung Notes locked notes or a hidden folder.
+
+Add a “Private Vault” section:
+- Accessible from Vault screen by pulling down/rolling down from the top OR tapping a discreet lock icon.
+- When user triggers it, ask for PIN/biometric.
+- After successful unlock, show sensitive files/info.
+- If not unlocked, sensitive items should stay hidden from normal Vault/Info lists if privacy mode is on.
+
+Implementation options:
+Choose the stable one:
+Option A:
+- Add a small lock button in Vault header.
+- Tapping opens Private Vault after PIN/biometric.
+Option B:
+- Pull down on Vault screen reveals “Unlock Private Vault”.
+- User enters PIN.
+- Then sensitive files/cards appear.
+
+If pull-down is hard, use Option A first.
+
+Private Vault screen should show:
+- sensitive files
+- sensitive info cards
+- quick share/copy
+- search/filter
+- lock button
+
+Rules:
+- Sensitive files should be marked using isSensitive.
+- Sensitive info cards should be marked using isSensitive.
+- Private Vault should require PIN if PIN is set.
+- If PIN is not set, ask user to set PIN before enabling Private Vault.
+- Biometrics can unlock Private Vault if enabled.
+- Private Vault should auto-lock when app backgrounds.
+- Private Vault should not show previews in app switcher if possible.
+
+Normal Vault:
+- If Privacy Mode is on, hide sensitive files from the normal list and show:
+  “3 private items hidden”
+  [Unlock Private Vault]
+- If Privacy Mode is off, sensitive files can appear but their previews/names should still have a lock badge.
+
+==================================================
+4. FIX FILE CARDS NOT OPENING DETAILS
+==================================================
+
+Current bug:
+Tapping a file card only updates lastOpenedAt and does not open file detail page.
+
+Fix:
+When tapping a file card:
+1. update lastOpenedAt
+2. navigate to /file/[id]
+
+Use expo-router:
+router.push(`/file/${item.id}`)
+
+File detail page should allow:
+- preview image
+- open/share PDF
+- rename file
+- edit category
+- edit note
+- edit expiry date
+- mark/unmark sensitive
+- mark/unmark favorite
+- delete file
+- compress image if image
+- view requirements note
+
+==================================================
+5. FIX SENSITIVE FILE DISPLAY
+==================================================
+
+Current problem:
+Sensitive files are not actually hidden/masked.
+
+Expected:
+For file.isSensitive:
+- show lock badge
+- if privacy mode is on and Private Vault is locked:
+  - hide from normal Vault list
+  - do not show thumbnail
+  - do not show full name
+- inside Private Vault after unlock:
+  - show normally
+- in file detail:
+  - if sensitive and not unlocked, ask for unlock before showing preview
+
+FileCard should:
+- display lock icon for sensitive files
+- mask preview if needed
+- hide sensitive name if privacy mode enabled:
+  “Private Document”
+  or
+  “Passport••••”
+
+==================================================
+6. FIX KIT FUNCTIONALITY
+==================================================
+
+Current problem:
+Kits show Files and Info sections but there is no clear way to add files/info cards to a kit.
+
+Fix kit detail page.
+
+Add buttons:
+Files section:
+[+ Add File]
+
+Info section:
+[+ Add Info Card]
+
+When tapping Add File:
+- open modal/list of existing files
+- allow selecting one or multiple files
+- allow search/filter
+- add selected fileIds to kit
+- avoid duplicates
+
+When tapping Add Info Card:
+- open modal/list of existing info cards
+- allow selecting one or multiple info cards
+- allow search/filter
+- add selected infoCardIds to kit
+- avoid duplicates
+
+Also add:
+- remove file from kit
+- remove info card from kit
+- keep original file/info in Vault/Info, only remove reference from kit
+
+Kit page should become useful:
+- Files: share each file, remove from kit
+- Info: copy each info value, remove from kit
+- Checklist: add/toggle/delete items
+- Requirements: edit and save clearly
+- Share selected files
+- Share all files
+
+==================================================
+7. MAKE KIT TEMPLATES ACTUALLY USEFUL
+==================================================
+
+Current problem:
+Templates only set name/icon/color. They do not create checklist or requirements.
+
+Fix:
+When creating a kit from template, add useful default checklist items and requirements.
+
+Template: Visa Application
+Checklist:
+- Passport scan added
+- ID photo added
+- Flight ticket added
+- Accommodation information added
+- Invitation letter added
+- Emergency contact added
+- Form submitted
+
+Requirements note:
+Photo size:
+Max file size:
+Accepted formats:
+Filename rules:
+Submission deadline:
+
+Expected items:
+- Passport scan
+- ID photo
+- Flight ticket
+- Accommodation info
+- Invitation letter
+- Emergency contact
+
+Template: School Submission
+Checklist:
+- Required file attached
+- Correct filename checked
+- Deadline checked
+- Email recipient checked
+- Submitted
+
+Requirements note:
+Filename format:
+Deadline:
+Recipient email:
+File type:
+
+Template: Travel / Airport
+Checklist:
+- Passport
+- Ticket
+- Visa
+- Accommodation
+- Charger/adaptor
+- Emergency contact
+- Insurance
+
+Template: Scholarship / Application
+Checklist:
+- Application form
+- Recommendation letter
+- Transcript
+- Personal statement
+- Evidence files
+- Submitted before deadline
+
+Template: Medical Visit
+Checklist:
+- Passport/ID
+- Insurance
+- Appointment information
+- Medical note
+- Payment method
+
+==================================================
+8. ADD MISSING ITEMS DETECTOR
+==================================================
+
+Add expectedItems to Kit type.
+
+ExpectedItem:
+- id
+- title
+- type: "file" | "info" | "checklist"
+- isRequired
+- linkedFileId optional
+- linkedInfoCardId optional
+- linkedChecklistId optional
+
+Kit detail should show:
+
+Missing:
+- Passport scan
+- ID photo
+- Flight ticket
+
+Logic:
+If expected item has no linked file/info/checklist completed, it is missing.
+
+Simpler MVP implementation:
+- Store expectedItems as plain required labels.
+- User can mark expected item as satisfied manually or link it to file/info.
+- Show missing items until satisfied.
+
+Kit progress should include:
+- linked/ready files
+- linked/ready info cards
+- completed checklist
+- satisfied expected items
+
+Do not overcomplicate. Make it useful and clear.
+
+==================================================
+9. FIX “SHARE ALL” / SUBMISSION PACKAGE
+==================================================
+
+Current behavior:
+Share all loops through files and opens share sheet repeatedly.
+
+Better:
+Add “Submission Package” section/button.
+
+Inside kit:
+[Share Files]
+Then show selectable file list:
+[x] Passport scan
+[x] Flight ticket
+[x] Invitation letter
+[ ] Extra note
+
+Buttons:
+- Share selected
+- Share all
+
+If Expo/Android supports sharing multiple files directly, use it.
+If not, fallback:
+- show clear message:
+  “Android share sheet may open one file at a time.”
+- then share sequentially only after user confirms.
+
+Do not silently open many share sheets without explanation.
+
+==================================================
+10. FIX BACKUP / IMPORT LIMITATIONS
+==================================================
+
+Current issue:
+Backup exports file metadata and localUri, but not actual physical files. On another phone, imported file cards will point to missing paths.
+
+Fix one of these approaches:
+
+Preferred:
+Full backup ZIP:
+- docpocket_backup_YYYY-MM-DD.zip
+- contains:
+  - manifest.json
+  - files/ copied actual document files
+
+Import ZIP:
+- extract files into app document directory
+- restore metadata with new localUri paths
+- restore info cards
+- restore kits
+- restore settings
+
+If ZIP is too difficult for now:
+At least make metadata-only backup honest:
+- Rename button:
+  Export Metadata Backup
+- Show warning:
+  “This backup saves info cards, kits, and file metadata, but not the actual document files.”
+- Do not pretend it fully backs up documents.
+
+Also fix import:
+- importBackup should restore settings too
+- validate backup before writing
+- if invalid, current data must remain unchanged
+- show preview before import:
+  files found
+  info cards found
+  kits found
+  settings found
+- ask confirmation:
+  “This will replace current data. Continue?”
+
+Important:
+Do not partially import corrupted data.
+
+==================================================
+11. FIX DELETE ALL DATA
+==================================================
+
+Current problem:
+clearAllData removes AsyncStorage only. It may leave physical files in app storage.
+
+Fix:
+Delete:
+- AsyncStorage data
+- files inside FileSystem.documentDirectory/docpocket/
+- secure PIN data if user chooses full reset
+- settings if full reset
+
+Danger Zone:
+Delete All Data should require PIN if PIN is enabled.
+
+After deletion:
+- refresh all contexts
+- app should show empty Vault/Info/Kits
+- no ghost file cards
+- no leftover private files
+
+==================================================
+12. FIX APP LOCK STARTUP BUG
+==================================================
+
+Possible bug:
+AppLockContext initializes before settings finish loading, so PIN lock may not activate correctly on startup.
+
+Fix:
+- AppLockProvider should wait until SettingsProvider loaded.
+- If settings.loaded is false, do not decide lock state yet.
+- Once settings loaded and PIN hash exists and pinEnabled is true:
+  set isLocked = true
+
+Also:
+- if PIN is enabled, app should lock on cold launch
+- app should auto-lock after background based on setting
+- Private Vault should lock when app backgrounds
+
+==================================================
+13. CLARIFY “EXPIRY WARNING”
+==================================================
+
+The current label is confusing.
+
+Rename:
+
+Expiry Warnings
+
+to:
+
+Expiry Alert Threshold
+
+Subtitle:
+“Mark documents as expiring soon before this many days.”
+
+Options:
+- 30 days before expiry
+- 60 days before expiry
+- 90 days before expiry
+- 180 days before expiry
+
+Also add short explanation:
+Example: if set to 60 days, a passport expiring within 60 days shows “Expiring Soon.”
+
+Keep this in Settings, but make wording clearer.
+
+==================================================
+14. IMPROVE DESIGN / UI
+==================================================
+
+Current design feels too empty/plain and inconvenient.
+
+Improve:
+- better spacing
+- cleaner cards
+- clearer section buttons
+- less awkward blank space
+- no tiny unclear icons
+- better empty states
+- more obvious actions
+- better dark mode
+- consistent icons
+- consistent button style
+
+Vault screen:
+- add quick action cards:
+  Add File
+  Add Info
+  Create Kit
+  Private Vault
+- keep search and filters
+- show recent files if no search/filter
+
+Info screen:
+- sensitive cards should clearly show lock/eye
+- copy button should be obvious
+- add quick templates:
+  Passport Number
+  Phone Number
+  Address
+  Emergency Contact
+
+Kits screen:
+- kit card should show:
+  progress
+  missing count
+  files count
+  info count
+  checklist count
+- empty state should include:
+  Create Visa Kit
+  Create School Kit
+
+Kit detail:
+- Add File and Add Info buttons must be visible
+- Missing items should be near top
+- Share selected files button should be visible if files exist
+- Requirements edit should have explicit Save/Cancel, not only onBlur
+
+Settings:
+- make sections understandable
+- remove or clarify technical wording
+- show “Local only, no cloud”
+- show backup limitations clearly
+
+==================================================
+15. FIX REQUIREMENTS EDITING
+==================================================
+
+Current requirements editing saves on blur. This is unclear.
+
+Change to:
+Requirements section:
+[Edit]
+
+When editing:
+- multiline input
+- Save button
+- Cancel button
+
+Do not rely only on onBlur.
+
+==================================================
+16. ADD “ADD TO KIT” FROM FILE AND INFO
+==================================================
+
+From file detail:
+Button:
+Add to Kit
+
+- show list of kits
+- select kit
+- add this file to kit
+
+From info card:
+Button/menu:
+Add to Kit
+
+- show list of kits
+- select kit
+- add info card to kit
+
+This is necessary for convenience.
+
+==================================================
+17. FIX SEARCH
+==================================================
+
+Search should work across:
+Vault:
+- file name
+- original filename
+- tags
+- note
+- requirements note
+- category
+
+Info:
+- title
+- value
+- category
+- tags
+
+Kits:
+- kit name
+- checklist items
+- requirements note
+- note
+- expected items
+
+Do not search inside PDFs yet.
+
+==================================================
+18. ADD RECENTLY USED PROPERLY
+==================================================
+
+Track:
+- file opened
+- file shared
+- info copied
+- kit opened
+
+Recently Used card on Vault or a separate section:
+- Passport Scan
+- Korean Phone
+- Thailand Visa Kit
+
+Keep it lightweight.
+
+==================================================
+19. FIX FILE DELETE REFERENCES
+==================================================
+
+When deleting a file:
+- remove it from Vault
+- delete physical file
+- remove fileId from all kits
+
+When deleting info card:
+- remove it from Info
+- remove infoCardId from all kits
+
+When deleting kit:
+- delete only kit
+- do not delete original files/info cards
+
+==================================================
+20. TYPECHECK AND TEST
+==================================================
+
+After changes, run:
+
+pnpm install
+pnpm --filter @workspace/docpocket run typecheck
+
+Fix all type errors.
+
+Test core flows:
+1. Add file
+2. Tap file card opens detail
+3. Share file
+4. Mark file sensitive
+5. Enable privacy mode
+6. Sensitive file hidden/masked
+7. Unlock Private Vault
+8. Sensitive file appears
+9. Add info card
+10. Mark sensitive
+11. Sensitive value is masked by default
+12. Reveal and hide works
+13. Copy sensitive value
+14. Clipboard clears
+15. Create Visa kit from template
+16. Template creates checklist/requirements/expected items
+17. Add file to kit
+18. Add info card to kit
+19. Missing items update
+20. Share selected kit files
+21. Theme Light/Dark/System works
+22. Backup export/import works or clearly says metadata-only
+23. Delete all data removes physical files too
+24. PIN lock works on cold launch and background
+
+==================================================
+21. APK BUILD SETUP
+==================================================
+
+Keep APK build-ready.
+
+Check:
+artifacts/docpocket/app.json
+
+It should contain:
+- name: DocPocket
+- slug: docpocket
+- userInterfaceStyle: automatic
+- android.package: com.mekan.docpocket
+- android.versionCode: increment if building new APK
+
+Make sure artifacts/docpocket/eas.json exists:
+
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  }
+}
+
+Do not break EAS build.
+
+==================================================
+FINAL RESULT
+==================================================
+
+I want DocPocket to feel like a real app:
+
+- Vault stores documents.
+- Info stores copyable values.
+- Kits actually help with visa/school/travel submissions.
+- Sensitive values/files are really hidden.
+- Private Vault works like a locked hidden section.
+- Theme switch works.
+- File detail opens.
+- Add files/info to kits works.
+- Templates are useful.
+- Expiry warning wording is clear.
+- Backup behavior is honest and safe.
+- Design is cleaner and more convenient.
+- App remains offline, private, fast, and not overloaded.
+```

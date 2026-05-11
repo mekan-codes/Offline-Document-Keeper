@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 import { getSettings, saveSettings } from '@/storage/db';
-import type { AppSettings, ThemePreference } from '@/types';
+import type { AppSettings } from '@/types';
 
 const DEFAULT: AppSettings = {
   themePreference: 'system',
@@ -20,7 +20,7 @@ interface SettingsContextValue {
   loaded: boolean;
 }
 
-const SettingsContext = createContext<SettingsContextValue | null>(null);
+export const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT);
