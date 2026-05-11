@@ -16,6 +16,8 @@ import { useInfo } from '@/contexts/InfoContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { FILE_CATEGORY_CONFIG, INFO_CATEGORY_CONFIG } from '@/constants/categories';
 import { makeChecklistItem } from '@/storage/db';
+import { SelectFilesModal } from '@/components/SelectFilesModal';
+import { SelectInfoModal } from '@/components/SelectInfoModal';
 
 export default function KitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -29,8 +31,10 @@ export default function KitDetailScreen() {
   const kit = kits.find(k => k.id === id);
   const [newCheckItem, setNewCheckItem] = useState('');
   const [showAddCheck, setShowAddCheck] = useState(false);
-  const [editingRequirements, setEditingRequirements] = useState(false);
+  const [editingReq, setEditingReq] = useState(false);
   const [reqNote, setReqNote] = useState(kit?.requirementsNote || '');
+  const [showSelectFiles, setShowSelectFiles] = useState(false);
+  const [showSelectInfo, setShowSelectInfo] = useState(false);
 
   if (!kit) {
     return (
@@ -43,32 +47,66 @@ export default function KitDetailScreen() {
   const kitFiles = kit.fileIds.map(fid => files.find(f => f.id === fid)).filter(Boolean) as typeof files;
   const kitCards = kit.infoCardIds.map(cid => cards.find(c => c.id === cid)).filter(Boolean) as typeof cards;
 
-  const total = kit.fileIds.length + kit.infoCardIds.length + kit.checklistItems.length;
-  const fileReady = kitFiles.length;
-  const infoReady = kitCards.length;
-  const checkDone = kit.checklistItems.filter(i => i.isDone).length;
-  const ready = fileReady + infoReady + checkDone;
-  const progress = total > 0 ? ready / total : 0;
+  const totalItems = kit.fileIds.length + kit.infoCardIds.length + kit.checklistItems.length;
+  const doneItems = kitFiles.length + kitCards.length + kit.checklistItems.filter(i => i.isDone).length;
+  const progress = totalItems > 0 ? doneItems / totalItems : 0;
   const progressColor = progress >= 1 ? '#10B981' : progress >= 0.5 ? '#F59E0B' : colors.destructive;
 
-  const handleShareAll = async () => {
-    if (Platform.OS === 'web') { Alert.alert('Not supported', 'Sharing not available on web'); return; }
-    if (kitFiles.length === 0) { Alert.alert('No files', 'Add files to this kit first'); return; }
-    for (const f of kitFiles) {
-      try {
-        const canShare = await Sharing.isAvailableAsync();
-        if (canShare) await Sharing.shareAsync(f.localUri, { mimeType: f.mimeType, dialogTitle: f.name });
-        await new Promise(r => setTimeout(r, 500));
-      } catch {}
-    }
+  const handleAddFiles = async (selectedIds: string[]) => {
+    const merged = Array.from(new Set([...kit.fileIds, ...selectedIds]));
+    await updateKitById(kit.id, { fileIds: merged });
+  };
+
+  const handleAddInfo = async (selectedIds: string[]) => {
+    const merged = Array.from(new Set([...kit.infoCardIds, ...selectedIds]));
+    await updateKitById(kit.id, { infoCardIds: merged });
+  };
+
+  const handleRemoveFile = (fileId: string) => {
+    Alert.alert('Remove from Kit', 'Remove this file from the kit? The original file will remain in your Vault.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: async () => {
+        await updateKitById(kit.id, { fileIds: kit.fileIds.filter(id => id !== fileId) });
+      }},
+    ]);
+  };
+
+  const handleRemoveInfo = (cardId: string) => {
+    Alert.alert('Remove from Kit', 'Remove this info card from the kit? The original card will remain in your Info tab.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: async () => {
+        await updateKitById(kit.id, { infoCardIds: kit.infoCardIds.filter(id => id !== cardId) });
+      }},
+    ]);
   };
 
   const handleShareFile = async (uri: string, mimeType: string, name: string) => {
-    if (Platform.OS === 'web') { Alert.alert('Not supported'); return; }
+    if (Platform.OS === 'web') return;
     try {
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) await Sharing.shareAsync(uri, { mimeType, dialogTitle: name });
     } catch {}
+  };
+
+  const handleShareAll = async () => {
+    if (Platform.OS === 'web') { Alert.alert('Not supported', 'Sharing not available on web'); return; }
+    if (kitFiles.length === 0) { Alert.alert('No files', 'Add files to this kit first'); return; }
+    Alert.alert(
+      'Share All Files',
+      `This will share ${kitFiles.length} file${kitFiles.length !== 1 ? 's' : ''} one at a time.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Share All', onPress: async () => {
+          for (const f of kitFiles) {
+            try {
+              const canShare = await Sharing.isAvailableAsync();
+              if (canShare) await Sharing.shareAsync(f.localUri, { mimeType: f.mimeType, dialogTitle: f.name });
+              await new Promise(r => setTimeout(r, 600));
+            } catch {}
+          }
+        }},
+      ]
+    );
   };
 
   const handleCopyInfo = async (value: string, isSensitive: boolean) => {
@@ -91,10 +129,10 @@ export default function KitDetailScreen() {
     await updateKitById(kit.id, { checklistItems: kit.checklistItems.filter(i => i.id !== itemId) });
   };
 
-  const handleDelete = () => {
-    Alert.alert('Delete Kit', `Delete "${kit.name}"?`, [
+  const handleDeleteKit = () => {
+    Alert.alert('Delete Kit', `Delete "${kit.name}"? All files and info cards will remain in your Vault.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await deleteKitById(kit.id); router.back(); } },
+      { text: 'Delete Kit', style: 'destructive', onPress: async () => { await deleteKitById(kit.id); router.back(); } },
     ]);
   };
 
@@ -107,14 +145,14 @@ export default function KitDetailScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
           <Text style={s.backText}>Kits</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleDelete}>
+        <TouchableOpacity onPress={handleDeleteKit}>
           <Ionicons name="trash-outline" size={20} color={colors.destructive} />
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
         {/* Kit header */}
-        <View style={[s.kitHeader, { backgroundColor: kit.color + '18' }]}>
+        <View style={[s.kitHeader, { backgroundColor: kit.color + '15' }]}>
           <View style={[s.kitIconWrap, { backgroundColor: kit.color + '30' }]}>
             <Ionicons name={kit.icon as any} size={32} color={kit.color} />
           </View>
@@ -124,7 +162,7 @@ export default function KitDetailScreen() {
               <View style={s.progressBg}>
                 <View style={[s.progressFill, { width: `${progress * 100}%` as any, backgroundColor: progressColor }]} />
               </View>
-              <Text style={[s.progressText, { color: progressColor }]}>{ready}/{total} ready</Text>
+              <Text style={[s.progressText, { color: progressColor }]}>{doneItems}/{totalItems} ready</Text>
             </View>
           </View>
         </View>
@@ -141,9 +179,15 @@ export default function KitDetailScreen() {
 
         {/* Files */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Files</Text>
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>Files ({kit.fileIds.length})</Text>
+            <TouchableOpacity style={[s.addItemBtn, { borderColor: colors.primary }]} onPress={() => setShowSelectFiles(true)}>
+              <Ionicons name="add" size={16} color={colors.primary} />
+              <Text style={[s.addItemText, { color: colors.primary }]}>Add File</Text>
+            </TouchableOpacity>
+          </View>
           {kitFiles.length === 0 ? (
-            <Text style={s.emptyText}>No files added yet</Text>
+            <Text style={s.emptyText}>Tap "Add File" to link files from your Vault</Text>
           ) : kitFiles.map(f => {
             const cat = FILE_CATEGORY_CONFIG[f.category];
             return (
@@ -155,6 +199,9 @@ export default function KitDetailScreen() {
                 <TouchableOpacity style={s.itemAction} onPress={() => handleShareFile(f.localUri, f.mimeType, f.name)}>
                   <Ionicons name="share-outline" size={18} color={colors.primary} />
                 </TouchableOpacity>
+                <TouchableOpacity style={s.itemAction} onPress={() => handleRemoveFile(f.id)}>
+                  <Ionicons name="close-circle" size={18} color={colors.destructive} />
+                </TouchableOpacity>
               </View>
             );
           })}
@@ -162,14 +209,20 @@ export default function KitDetailScreen() {
 
         {/* Info */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Info</Text>
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>Info ({kit.infoCardIds.length})</Text>
+            <TouchableOpacity style={[s.addItemBtn, { borderColor: colors.primary }]} onPress={() => setShowSelectInfo(true)}>
+              <Ionicons name="add" size={16} color={colors.primary} />
+              <Text style={[s.addItemText, { color: colors.primary }]}>Add Info</Text>
+            </TouchableOpacity>
+          </View>
           {kitCards.length === 0 ? (
-            <Text style={s.emptyText}>No info cards added yet</Text>
+            <Text style={s.emptyText}>Tap "Add Info" to link info cards</Text>
           ) : kitCards.map(c => {
             const cat = INFO_CATEGORY_CONFIG[c.category];
             return (
               <View key={c.id} style={[s.itemRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={[s.itemDot, { backgroundColor: cat.color }]} />
+                <View style={[s.catDot, { backgroundColor: cat.color }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={s.itemLabel} numberOfLines={1}>{c.title}</Text>
                   <Text style={[s.itemSub, { color: colors.mutedForeground }]} numberOfLines={1}>
@@ -178,6 +231,9 @@ export default function KitDetailScreen() {
                 </View>
                 <TouchableOpacity style={s.itemAction} onPress={() => handleCopyInfo(c.value, c.isSensitive)}>
                   <Ionicons name="copy-outline" size={18} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={s.itemAction} onPress={() => handleRemoveInfo(c.id)}>
+                  <Ionicons name="close-circle" size={18} color={colors.destructive} />
                 </TouchableOpacity>
               </View>
             );
@@ -188,7 +244,9 @@ export default function KitDetailScreen() {
         <View style={s.section}>
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>Checklist</Text>
-            <Text style={[s.sectionCount, { color: progressColor }]}>{checkDone}/{kit.checklistItems.length}</Text>
+            <Text style={[s.sectionCount, { color: progressColor }]}>
+              {kit.checklistItems.filter(i => i.isDone).length}/{kit.checklistItems.length} done
+            </Text>
           </View>
           {kit.checklistItems.map(item => (
             <TouchableOpacity key={item.id} style={[s.checkRow, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -205,8 +263,10 @@ export default function KitDetailScreen() {
 
           {showAddCheck ? (
             <View style={[s.addCheckRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <TextInput style={[s.checkInput, { color: colors.foreground }]} value={newCheckItem} onChangeText={setNewCheckItem}
-                placeholder="New checklist item" placeholderTextColor={colors.mutedForeground} autoFocus returnKeyType="done" onSubmitEditing={handleAddChecklist} />
+              <TextInput style={[s.checkInput, { color: colors.foreground }]} value={newCheckItem}
+                onChangeText={setNewCheckItem} placeholder="New checklist item"
+                placeholderTextColor={colors.mutedForeground} autoFocus returnKeyType="done"
+                onSubmitEditing={handleAddChecklist} />
               <TouchableOpacity onPress={handleAddChecklist}>
                 <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
               </TouchableOpacity>
@@ -226,24 +286,40 @@ export default function KitDetailScreen() {
         <View style={s.section}>
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>Requirements</Text>
-            <TouchableOpacity onPress={() => { setReqNote(kit.requirementsNote); setEditingRequirements(!editingRequirements); }}>
-              <Ionicons name={editingRequirements ? 'checkmark-circle' : 'pencil-outline'} size={20} color={colors.primary} />
+            <TouchableOpacity onPress={async () => {
+              if (editingReq) { await updateKitById(kit.id, { requirementsNote: reqNote }); }
+              setEditingReq(!editingReq);
+            }}>
+              <Ionicons name={editingReq ? 'checkmark-circle' : 'pencil-outline'} size={20} color={colors.primary} />
             </TouchableOpacity>
           </View>
-          {editingRequirements ? (
+          {editingReq ? (
             <TextInput
               style={[s.reqInput, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.card }]}
-              value={reqNote} onChangeText={setReqNote} multiline placeholder="Add requirements, rules, deadlines..."
+              value={reqNote} onChangeText={setReqNote} multiline
+              placeholder="Add requirements: photo size, file format, deadlines..."
               placeholderTextColor={colors.mutedForeground} textAlignVertical="top"
-              onBlur={async () => { await updateKitById(kit.id, { requirementsNote: reqNote }); setEditingRequirements(false); }}
             />
           ) : (
             <Text style={[s.reqText, { color: kit.requirementsNote ? colors.foreground : colors.mutedForeground }]}>
-              {kit.requirementsNote || 'No requirements added. Tap edit to add photo sizes, file limits, etc.'}
+              {kit.requirementsNote || 'No requirements added. Tap edit to add photo sizes, deadlines, format rules.'}
             </Text>
           )}
         </View>
       </ScrollView>
+
+      <SelectFilesModal
+        visible={showSelectFiles}
+        onClose={() => setShowSelectFiles(false)}
+        existingFileIds={kit.fileIds}
+        onConfirm={handleAddFiles}
+      />
+      <SelectInfoModal
+        visible={showSelectInfo}
+        onClose={() => setShowSelectInfo(false)}
+        existingCardIds={kit.infoCardIds}
+        onConfirm={handleAddInfo}
+      />
     </View>
   );
 }
@@ -264,16 +340,18 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   shareAllText: { color: '#fff', fontSize: 15, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
   section: { marginHorizontal: 16, marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: colors.mutedForeground, fontFamily: 'Inter_700Bold', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: colors.mutedForeground, fontFamily: 'Inter_700Bold', textTransform: 'uppercase', letterSpacing: 0.8 },
   sectionCount: { fontSize: 13, fontWeight: '700', fontFamily: 'Inter_700Bold' },
-  emptyText: { color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 14, fontStyle: 'italic' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius, borderWidth: 1, marginBottom: 6 },
+  addItemBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
+  addItemText: { fontSize: 13, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
+  emptyText: { color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontSize: 13, fontStyle: 'italic' },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius, borderWidth: 1, marginBottom: 6 },
   itemIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  itemDot: { width: 10, height: 10, borderRadius: 5 },
+  catDot: { width: 10, height: 10, borderRadius: 5 },
   itemLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: colors.foreground, fontFamily: 'Inter_500Medium' },
   itemSub: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 1 },
   itemAction: { padding: 6 },
-  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius, borderWidth: 1, marginBottom: 6 },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius, borderWidth: 1, marginBottom: 6 },
   checkBox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   checkText: { flex: 1, fontSize: 14, color: colors.foreground, fontFamily: 'Inter_400Regular' },
   checkTextDone: { textDecorationLine: 'line-through', color: colors.mutedForeground },

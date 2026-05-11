@@ -108,7 +108,7 @@ export function AddFileModal({ visible, onClose }: AddFileModalProps) {
     if (!name.trim()) { Alert.alert('Name required', 'Please enter a name for this file'); return; }
     setSaving(true);
     try {
-      const dir = FileSystem.documentDirectory + 'docpocket/';
+      const dir = (FileSystem as any).documentDirectory + 'docpocket/';
       await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
       const ext = pickedName.includes('.') ? '.' + pickedName.split('.').pop() : '';
       const destName = `${Date.now().toString(36)}${ext}`;

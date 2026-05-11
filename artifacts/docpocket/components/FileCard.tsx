@@ -33,10 +33,20 @@ export function FileCard({ file, onPress, onShare, onFavorite }: FileCardProps) 
           size={26}
           color={cat.color}
         />
+        {file.isSensitive && (
+          <View style={s.lockBadge}>
+            <Ionicons name="lock-closed" size={9} color="#fff" />
+          </View>
+        )}
       </View>
 
       <View style={s.body}>
-        <Text style={s.name} numberOfLines={1}>{file.name}</Text>
+        <View style={s.nameRow}>
+          <Text style={s.name} numberOfLines={1}>{file.name}</Text>
+          {file.isSensitive && (
+            <Ionicons name="shield-checkmark" size={13} color={colors.primary} style={{ marginLeft: 4 }} />
+          )}
+        </View>
         <View style={s.meta}>
           <View style={[s.catBadge, { backgroundColor: cat.color + '18' }]}>
             <Text style={[s.catText, { color: cat.color }]}>{cat.label}</Text>
@@ -54,7 +64,11 @@ export function FileCard({ file, onPress, onShare, onFavorite }: FileCardProps) 
       <View style={s.actions}>
         <TouchableOpacity
           style={s.actionBtn}
-          onPress={(e) => { e.stopPropagation(); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onFavorite(); }}
+          onPress={(e) => {
+            e.stopPropagation();
+            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onFavorite();
+          }}
         >
           <Ionicons
             name={file.isFavorite ? 'star' : 'star-outline'}
@@ -64,7 +78,11 @@ export function FileCard({ file, onPress, onShare, onFavorite }: FileCardProps) 
         </TouchableOpacity>
         <TouchableOpacity
           style={s.actionBtn}
-          onPress={(e) => { e.stopPropagation(); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onShare(); }}
+          onPress={(e) => {
+            e.stopPropagation();
+            if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onShare();
+          }}
         >
           <Ionicons name="share-outline" size={18} color={colors.primary} />
         </TouchableOpacity>
@@ -86,9 +104,11 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
     borderColor: colors.border,
     gap: 12,
   },
-  iconWrap: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  iconWrap: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  lockBadge: { position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1 },
-  name: { fontSize: 15, fontWeight: '600', color: colors.foreground, fontFamily: 'Inter_600SemiBold', marginBottom: 4 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  name: { fontSize: 15, fontWeight: '600', color: colors.foreground, fontFamily: 'Inter_600SemiBold', flex: 1 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   catBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   catText: { fontSize: 11, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
