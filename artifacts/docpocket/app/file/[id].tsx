@@ -28,6 +28,8 @@ export default function FileDetailScreen() {
   const [editNote, setEditNote] = useState(file?.note || '');
   const [editExpiry, setEditExpiry] = useState(file?.expiryDate || '');
   const [editCategory, setEditCategory] = useState<FileCategory>(file?.category || 'other');
+  const [editSensitive, setEditSensitive] = useState(file?.isSensitive ?? false);
+  const [editFavorite, setEditFavorite] = useState(file?.isFavorite ?? false);
   const [compressing, setCompressing] = useState(false);
 
   const s = styles(colors, colors.radius);
@@ -49,12 +51,24 @@ export default function FileDetailScreen() {
   const isImage = file.mimeType?.startsWith('image/');
   const isPdf = file.mimeType?.includes('pdf');
 
+  const handleStartEditing = () => {
+    setEditName(file.name);
+    setEditNote(file.note);
+    setEditExpiry(file.expiryDate || '');
+    setEditCategory(file.category);
+    setEditSensitive(file.isSensitive);
+    setEditFavorite(file.isFavorite);
+    setEditing(true);
+  };
+
   const handleSave = async () => {
     await updateFileById(file.id, {
       name: editName.trim() || file.name,
       note: editNote,
       expiryDate: editExpiry || undefined,
       category: editCategory,
+      isSensitive: editSensitive,
+      isFavorite: editFavorite,
     });
     setEditing(false);
   };
@@ -104,12 +118,21 @@ export default function FileDetailScreen() {
           { text: 'Save Compressed', onPress: async () => { await updateFileById(file.id, { localUri: destUri, mimeType: 'image/jpeg', sizeBytes: newSize }); } },
         ]
       );
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Failed to compress image');
     } finally { setCompressing(false); }
   };
 
   const CATEGORIES: FileCategory[] = ['identity', 'visa', 'travel', 'school', 'medical', 'photos', 'other'];
+
+  const ToggleRow = ({ label, value, onToggle }: { label: string; value: boolean; onToggle: () => void }) => (
+    <TouchableOpacity style={s.toggleRow} onPress={onToggle} activeOpacity={0.7}>
+      <Text style={s.toggleLabel}>{label}</Text>
+      <View style={[s.toggle, { backgroundColor: value ? colors.primary : colors.muted }]}>
+        <View style={[s.toggleKnob, { marginLeft: value ? 20 : 2 }]} />
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
@@ -130,7 +153,7 @@ export default function FileDetailScreen() {
             </>
           ) : (
             <>
-              <TouchableOpacity style={s.topIconBtn} onPress={() => { setEditName(file.name); setEditNote(file.note); setEditExpiry(file.expiryDate || ''); setEditCategory(file.category); setEditing(true); }}>
+              <TouchableOpacity style={s.topIconBtn} onPress={handleStartEditing}>
                 <Ionicons name="pencil-outline" size={20} color={colors.foreground} />
               </TouchableOpacity>
               <TouchableOpacity style={s.topIconBtn} onPress={handleShare}>
@@ -183,6 +206,20 @@ export default function FileDetailScreen() {
 
               <Text style={s.label}>Expiry Date (YYYY-MM-DD)</Text>
               <TextInput style={[s.input, { borderColor: colors.border, color: colors.foreground }]} value={editExpiry} onChangeText={setEditExpiry} placeholder="2027-01-15" placeholderTextColor={colors.mutedForeground} />
+
+              <View style={[s.toggleSection, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                <ToggleRow
+                  label="Sensitive Document"
+                  value={editSensitive}
+                  onToggle={() => setEditSensitive(v => !v)}
+                />
+                <View style={[s.divider, { backgroundColor: colors.border }]} />
+                <ToggleRow
+                  label="Favorite"
+                  value={editFavorite}
+                  onToggle={() => setEditFavorite(v => !v)}
+                />
+              </View>
             </>
           ) : (
             <>
@@ -196,6 +233,15 @@ export default function FileDetailScreen() {
                 <Text style={s.metaText}>{file.mimeType?.includes('pdf') ? 'PDF' : file.mimeType?.startsWith('image') ? 'Image' : 'File'}</Text>
                 {file.sizeBytes > 0 && <Text style={s.metaText}>{(file.sizeBytes / 1024).toFixed(0)} KB</Text>}
                 {expiry && <View style={[s.expiryBadge, { backgroundColor: expiry.color + '20' }]}><Text style={[s.expiryText, { color: expiry.color }]}>{expiry.label}</Text></View>}
+                {file.isSensitive && (
+                  <View style={[s.sensitiveBadge, { backgroundColor: '#EF444420' }]}>
+                    <Ionicons name="lock-closed" size={11} color="#EF4444" />
+                    <Text style={[s.sensitiveBadgeText, { color: '#EF4444' }]}>Private</Text>
+                  </View>
+                )}
+                {file.isFavorite && (
+                  <Ionicons name="star" size={14} color="#F59E0B" />
+                )}
               </View>
 
               {file.expiryDate && <Text style={[s.metaText, { marginTop: 4 }]}>Expires: {new Date(file.expiryDate).toLocaleDateString()}</Text>}
@@ -266,6 +312,8 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   metaText: { fontSize: 12, color: colors.mutedForeground, fontFamily: 'Inter_400Regular' },
   expiryBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   expiryText: { fontSize: 12, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
+  sensitiveBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  sensitiveBadgeText: { fontSize: 12, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
   noteBox: { borderRadius: radius, borderWidth: 1, padding: 14, marginTop: 16 },
   noteTitle: { fontSize: 12, fontWeight: '700', color: colors.mutedForeground, fontFamily: 'Inter_700Bold', marginBottom: 4 },
   noteText: { fontSize: 14, color: colors.foreground, fontFamily: 'Inter_400Regular', lineHeight: 20 },
@@ -284,4 +332,10 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   catRow: { gap: 8, paddingVertical: 4 },
   catChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, borderWidth: 1 },
   catChipText: { fontSize: 12, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
+  toggleSection: { marginTop: 20, borderRadius: radius, borderWidth: 1, overflow: 'hidden' },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
+  toggleLabel: { fontSize: 15, color: colors.foreground, fontFamily: 'Inter_500Medium' },
+  toggle: { width: 44, height: 24, borderRadius: 12, justifyContent: 'center', flexShrink: 0 },
+  toggleKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', elevation: 2 },
+  divider: { height: 1, marginLeft: 16 },
 });

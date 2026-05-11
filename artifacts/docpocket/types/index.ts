@@ -41,6 +41,14 @@ export interface ChecklistItem {
   isDone: boolean;
 }
 
+export interface RequiredItem {
+  id: string;
+  label: string;
+  linkedFileId?: string;
+  linkedInfoCardId?: string;
+  manuallyDone: boolean;
+}
+
 export interface Kit {
   id: string;
   name: string;
@@ -49,6 +57,7 @@ export interface Kit {
   fileIds: string[];
   infoCardIds: string[];
   checklistItems: ChecklistItem[];
+  requiredItems: RequiredItem[];
   requirementsNote: string;
   note: string;
   createdAt: string;

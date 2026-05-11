@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { getInfoCards, addInfoCard, updateInfoCard, deleteInfoCard } from '@/storage/db';
-import type { InfoCard, InfoCategory } from '@/types';
+import { getInfoCards, addInfoCard, updateInfoCard, deleteInfoCardAndCleanKits } from '@/storage/db';
+import type { InfoCard } from '@/types';
 
 interface InfoContextValue {
   cards: InfoCard[];
@@ -49,7 +49,7 @@ export function InfoProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteCard = async (id: string) => {
-    await deleteInfoCard(id);
+    await deleteInfoCardAndCleanKits(id);
     await refreshCards();
   };
 

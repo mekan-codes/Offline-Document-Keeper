@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { getFiles, saveFiles, addFile, updateFile, deleteFile } from '@/storage/db';
-import type { DocumentFile, FileCategory } from '@/types';
+import { getFiles, saveFiles, addFile, updateFile, deleteFileAndCleanKits } from '@/storage/db';
+import type { DocumentFile } from '@/types';
 
 interface VaultContextValue {
   files: DocumentFile[];
@@ -45,7 +45,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteFileById = async (id: string) => {
-    await deleteFile(id);
+    await deleteFileAndCleanKits(id);
     await refreshFiles();
   };
 

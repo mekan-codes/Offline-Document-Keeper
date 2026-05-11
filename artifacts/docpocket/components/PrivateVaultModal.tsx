@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Platform, Alert,
+  Platform, Alert, AppState, AppStateStatus,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useAppLock } from '@/contexts/AppLockContext';
@@ -56,6 +57,17 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
     }
   }, [visible]);
 
+  useEffect(() => {
+    if (!visible) return;
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'background' || state === 'inactive') {
+        setAuthenticated(false);
+        setPinError(null);
+      }
+    });
+    return () => sub.remove();
+  }, [visible]);
+
   const tryBiometrics = async () => {
     const ok = await unlockWithBiometrics();
     if (ok) setAuthenticated(true);
@@ -72,7 +84,7 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
   };
 
   const handleShare = async (uri: string, mimeType: string, name: string) => {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web') { Alert.alert('Not supported', 'Sharing is not available on web.'); return; }
     try {
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) await Sharing.shareAsync(uri, { mimeType, dialogTitle: name });
@@ -85,6 +97,11 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
     if (settings.clearClipboardAfterSeconds > 0) {
       setTimeout(async () => { try { await Clipboard.setStringAsync(''); } catch {} }, settings.clearClipboardAfterSeconds * 1000);
     }
+  };
+
+  const handleOpenFile = (fileId: string) => {
+    handleClose();
+    setTimeout(() => router.push(`/file/${fileId}`), 300);
   };
 
   const handleClose = () => {
@@ -159,7 +176,11 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
                     const f = item.item;
                     const cat = FILE_CATEGORY_CONFIG[f.category];
                     return (
-                      <View style={[s.itemRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <TouchableOpacity
+                        style={[s.itemRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+                        onPress={() => handleOpenFile(f.id)}
+                        activeOpacity={0.7}
+                      >
                         <View style={[s.itemIcon, { backgroundColor: cat.color + '20' }]}>
                           <Ionicons name={f.mimeType?.startsWith('image') ? 'image' : 'document-text'} size={20} color={cat.color} />
                         </View>
@@ -167,10 +188,13 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
                           <Text style={s.itemLabel} numberOfLines={1}>{f.name}</Text>
                           <Text style={s.itemMeta}>{cat.label} • {(f.sizeBytes / 1024).toFixed(0)} KB</Text>
                         </View>
-                        <TouchableOpacity style={s.actionBtn} onPress={() => handleShare(f.localUri, f.mimeType, f.name)}>
+                        <TouchableOpacity
+                          style={s.actionBtn}
+                          onPress={(e) => { e.stopPropagation(); handleShare(f.localUri, f.mimeType, f.name); }}
+                        >
                           <Ionicons name="share-outline" size={18} color={colors.primary} />
                         </TouchableOpacity>
-                      </View>
+                      </TouchableOpacity>
                     );
                   }
                   if (item.type === 'info') {

@@ -7,13 +7,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useKits } from '@/contexts/KitsContext';
 import { KIT_COLORS, KIT_ICON_NAMES } from '@/constants/categories';
-import { makeChecklistItem } from '@/storage/db';
+import { makeChecklistItem, makeRequiredItem } from '@/storage/db';
+import type { ChecklistItem, RequiredItem } from '@/types';
 
 interface Template {
   name: string;
   icon: string;
   color: string;
   checklistItems: string[];
+  requiredItems: string[];
   requirementsNote: string;
 }
 
@@ -31,6 +33,14 @@ const TEMPLATES: Template[] = [
       'Emergency contact noted',
       'Form submitted',
     ],
+    requiredItems: [
+      'Passport scan',
+      'ID photo',
+      'Flight ticket',
+      'Accommodation info',
+      'Invitation letter',
+      'Emergency contact',
+    ],
     requirementsNote: 'Photo size: ___\nMax file size: ___\nAccepted formats: PDF, JPEG\nFilename rules: ___\nSubmission deadline: ___',
   },
   {
@@ -43,6 +53,10 @@ const TEMPLATES: Template[] = [
       'Deadline checked',
       'Recipient email confirmed',
       'Submitted and confirmation received',
+    ],
+    requiredItems: [
+      'Assignment / submission file',
+      'Cover sheet',
     ],
     requirementsNote: 'Filename format: ___\nDeadline: ___\nRecipient email: ___\nAccepted file type: ___',
   },
@@ -59,6 +73,11 @@ const TEMPLATES: Template[] = [
       'Emergency contact info',
       'Travel insurance',
     ],
+    requiredItems: [
+      'Passport',
+      'Flight ticket',
+      'Visa / entry document',
+    ],
     requirementsNote: '',
   },
   {
@@ -73,6 +92,12 @@ const TEMPLATES: Template[] = [
       'Evidence files added',
       'Submitted before deadline',
     ],
+    requiredItems: [
+      'Application form',
+      'Recommendation letter',
+      'Academic transcript',
+      'Personal statement',
+    ],
     requirementsNote: 'Deadline: ___\nSubmission portal: ___\nRequired documents: ___',
   },
   {
@@ -85,6 +110,10 @@ const TEMPLATES: Template[] = [
       'Appointment info noted',
       'Medical history / notes prepared',
       'Payment method ready',
+    ],
+    requiredItems: [
+      'ID / Passport',
+      'Insurance card',
     ],
     requirementsNote: 'Hospital / clinic: ___\nAppointment date: ___\nInsurance: ___',
   },
@@ -120,8 +149,11 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
     if (!name.trim()) { Alert.alert('Required', 'Enter a kit name'); return; }
     setSaving(true);
     try {
-      const checklistItems = appliedTemplate
+      const checklistItems: ChecklistItem[] = appliedTemplate
         ? appliedTemplate.checklistItems.map(text => makeChecklistItem(text))
+        : [];
+      const requiredItems: RequiredItem[] = appliedTemplate
+        ? appliedTemplate.requiredItems.map(label => makeRequiredItem(label))
         : [];
       await addNewKit({
         name: name.trim(),
@@ -130,6 +162,7 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
         fileIds: [],
         infoCardIds: [],
         checklistItems,
+        requiredItems,
         requirementsNote: appliedTemplate?.requirementsNote ?? '',
         note: '',
       });
@@ -159,7 +192,7 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
               <View style={[s.templateBadge, { backgroundColor: color + '20' }]}>
                 <Ionicons name="checkmark-circle" size={12} color={color} />
                 <Text style={[s.templateBadgeText, { color }]}>
-                  Template: {appliedTemplate.checklistItems.length} checklist items
+                  {appliedTemplate.checklistItems.length} checklist · {appliedTemplate.requiredItems.length} required items
                 </Text>
               </View>
             )}
@@ -171,7 +204,7 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
             placeholderTextColor={colors.mutedForeground} />
 
           <Text style={s.label}>Quick Templates</Text>
-          <Text style={s.labelSub}>Select a template to pre-fill checklist and requirements</Text>
+          <Text style={s.labelSub}>Select a template to pre-fill checklist, required items, and requirements</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.templateRow}>
             {TEMPLATES.map((t, i) => {
               const isActive = appliedTemplate?.name === t.name;

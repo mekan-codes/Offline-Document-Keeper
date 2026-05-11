@@ -52,7 +52,7 @@ interface AppLockContextValue {
 const AppLockContext = createContext<AppLockContextValue | null>(null);
 
 export function AppLockProvider({ children }: { children: ReactNode }) {
-  const { settings } = useSettings();
+  const { settings, loaded } = useSettings();
   const [isLocked, setIsLocked] = useState(false);
   const [isPinSetup, setIsPinSetup] = useState(false);
   const [hasBiometrics, setHasBiometrics] = useState(false);
@@ -61,6 +61,8 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   const initialized = useRef(false);
 
   useEffect(() => {
+    if (!loaded) return;
+
     async function init() {
       const hash = await getStoredHash();
       const pinExists = hash !== null;
@@ -79,7 +81,7 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
       initialized.current = true;
     }
     init();
-  }, []);
+  }, [loaded]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {

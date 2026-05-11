@@ -1,0 +1,94 @@
+Fix remaining DocPocket bugs.
+
+Repo:
+https://github.com/mekan-codes/Offline-Document-Keeper.git
+
+App folder:
+artifacts/docpocket/
+
+Do not rebuild from scratch. Fix current implementation.
+
+Required fixes:
+
+1. Fix AppLock startup
+- AppLockProvider must wait for SettingsContext.loaded before initializing lock state.
+- If settings.loaded is false, do not decide whether app is locked.
+- After settings load:
+  - check secure PIN hash
+  - if PIN exists and settings.pinEnabled is true, set isLocked = true
+- App must lock correctly on cold launch.
+
+2. Fix Delete All Data on Android
+- Do not use Alert.prompt because it does not work on Android.
+- Use the existing PINPad modal to confirm deletion when PIN is enabled.
+- After correct PIN:
+  - delete AsyncStorage data
+  - delete physical files in FileSystem.documentDirectory/docpocket/
+  - refresh files/cards/kits
+- If PIN is wrong, do not delete anything.
+
+3. Add sensitive/favorite editing in file detail
+- In app/file/[id].tsx edit mode, add toggles:
+  - Sensitive Document
+  - Favorite
+- Save these values through updateFileById.
+- File detail should show a Private/Sensitive badge if file.isSensitive is true.
+
+4. Clean kit references on deletion
+- When deleting a file:
+  - delete physical file
+  - remove file metadata
+  - remove that file ID from all kits.fileIds
+- When deleting an info card:
+  - remove info card
+  - remove that infoCardId from all kits.infoCardIds
+- Do not leave broken references.
+
+5. Add real missing-items detector
+- Add requiredItems or expectedItems to Kit type.
+- Template kits should create required items like:
+  Visa:
+  - Passport scan
+  - ID photo
+  - Flight ticket
+  - Accommodation info
+  - Invitation letter
+  - Emergency contact
+- Kit detail should show:
+  Missing:
+  - Passport scan
+  - ID photo
+- Allow each required item to be manually marked satisfied or linked to a file/info card.
+- Kit progress should include required items.
+
+6. Add Share Package / Share Selected
+- In kit detail, add “Share Package”.
+- Show selectable file list from that kit.
+- User selects files and taps Share selected.
+- If true multi-file share is unsupported, clearly warn and share one by one only after confirmation.
+- Do not silently open many share sheets.
+
+7. Strengthen backup import validation
+- Validate before saving anything.
+- Require:
+  - version exists
+  - files is array
+  - infoCards is array
+  - kits is array
+  - settings is object or fallback default
+- If validation fails, do not modify current data.
+- Show useful error message.
+- Keep metadata-only warning.
+
+8. Improve Private Vault usability
+- In Private Vault, allow tapping sensitive file to open detail.
+- Allow sharing sensitive file.
+- Allow copying sensitive info.
+- Keep lock button.
+- Private Vault should reset authenticated=false when closed/backgrounded.
+
+9. Typecheck
+Run:
+pnpm --filter @workspace/docpocket run typecheck
+
+Fix all errors.

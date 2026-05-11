@@ -15,10 +15,10 @@ import { useVault } from '@/contexts/VaultContext';
 import { useInfo } from '@/contexts/InfoContext';
 import { useKits } from '@/contexts/KitsContext';
 import { PINPad } from '@/components/PINPad';
-import { exportBackup, previewBackup, importBackup, clearAllData } from '@/storage/db';
+import { exportBackup, previewBackup, importBackup, clearAllData, BackupValidationError } from '@/storage/db';
 import { verifyPin } from '@/storage/pinUtils';
 
-type PINMode = 'setup' | 'change-old' | 'change-new' | 'disable' | null;
+type PINMode = 'setup' | 'change-old' | 'change-new' | 'disable' | 'delete-confirm' | null;
 
 export default function SettingsTab() {
   const colors = useColors();
@@ -35,6 +35,12 @@ export default function SettingsTab() {
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const s = styles(colors, colors.radius);
+
+  const doDeleteAll = async () => {
+    await clearAllData(true);
+    await refreshFiles(); await refreshCards(); await refreshKits();
+    Alert.alert('Deleted', 'All data and files have been permanently removed.');
+  };
 
   const handlePinComplete = async (pin: string) => {
     setPinModalError(null);
@@ -54,6 +60,14 @@ export default function SettingsTab() {
       const ok = await disablePin(pin);
       if (ok) { await updateSettings({ pinEnabled: false, biometricEnabled: false }); setPinMode(null); Alert.alert('PIN Removed', 'Your vault is no longer PIN-protected.'); }
       else setPinModalError('Incorrect PIN');
+    } else if (pinMode === 'delete-confirm') {
+      const ok = await verifyPin(pin);
+      if (ok) {
+        setPinMode(null);
+        await doDeleteAll();
+      } else {
+        setPinModalError('Incorrect PIN — deletion cancelled');
+      }
     }
   };
 
@@ -84,7 +98,12 @@ export default function SettingsTab() {
 
       let preview;
       try { preview = await previewBackup(json); }
-      catch { Alert.alert('Invalid Backup', 'This file is not a valid DocPocket backup. Your data was not changed.'); setImporting(false); return; }
+      catch (err) {
+        const msg = err instanceof BackupValidationError ? err.message : 'This file is not a valid DocPocket backup.';
+        Alert.alert('Invalid Backup', `${msg}\n\nYour data was not changed.`);
+        setImporting(false);
+        return;
+      }
 
       Alert.alert(
         'Import Backup?',
@@ -96,8 +115,9 @@ export default function SettingsTab() {
               const result = await importBackup(json);
               await refreshFiles(); await refreshCards(); await refreshKits();
               Alert.alert('Import Complete', `Restored:\n• ${result.fileCount} file records\n• ${result.infoCardCount} info cards\n• ${result.kitCount} kits`);
-            } catch {
-              Alert.alert('Import Failed', 'Backup data is corrupted. Your original data was not changed.');
+            } catch (err) {
+              const msg = err instanceof BackupValidationError ? err.message : 'Backup data is corrupted.';
+              Alert.alert('Import Failed', `${msg}\n\nYour original data was not changed.`);
             } finally { setImporting(false); }
           }},
         ]
@@ -106,31 +126,25 @@ export default function SettingsTab() {
   };
 
   const handleDeleteAll = () => {
-    const doDelete = async () => {
-      await clearAllData(true);
-      await refreshFiles(); await refreshCards(); await refreshKits();
-      Alert.alert('Deleted', 'All data and files have been permanently removed.');
-    };
-
     if (isPinSetup && settings.pinEnabled) {
-      Alert.alert('Delete All Data', 'Enter your PIN to confirm permanent deletion of all files and data.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Continue', style: 'destructive', onPress: () => {
-          Alert.prompt?.('Enter PIN', 'Confirm deletion with your PIN', async (pin) => {
-            if (!pin) return;
-            const ok = await verifyPin(pin);
-            if (ok) doDelete();
-            else Alert.alert('Incorrect PIN');
-          });
-        }},
-      ]);
+      Alert.alert(
+        'Delete All Data',
+        'Enter your PIN to confirm permanent deletion of all files and data. This cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', style: 'destructive', onPress: () => {
+            setPinModalError(null);
+            setPinMode('delete-confirm');
+          }},
+        ]
+      );
     } else {
       Alert.alert(
         'Delete All Data',
         'This will permanently delete ALL files, info cards, kits, and settings. This cannot be undone.',
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete Everything', style: 'destructive', onPress: doDelete },
+          { text: 'Delete Everything', style: 'destructive', onPress: doDeleteAll },
         ]
       );
     }
@@ -350,12 +364,14 @@ export default function SettingsTab() {
               pinMode === 'setup' ? 'Set PIN' :
               pinMode === 'change-old' ? 'Current PIN' :
               pinMode === 'change-new' ? 'New PIN' :
+              pinMode === 'delete-confirm' ? 'Confirm Deletion' :
               'Enter PIN to Disable'
             }
             subtitle={
               pinMode === 'setup' ? 'Choose a 6-digit PIN to protect your vault' :
               pinMode === 'change-old' ? 'Enter your current PIN first' :
               pinMode === 'change-new' ? 'Enter your new 6-digit PIN' :
+              pinMode === 'delete-confirm' ? 'Enter your PIN to permanently delete all data' :
               undefined
             }
             onComplete={handlePinComplete}
