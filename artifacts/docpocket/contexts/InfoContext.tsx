@@ -58,9 +58,10 @@ export function InfoProvider({ children }: { children: ReactNode }) {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(c =>
-        c.title.toLowerCase().includes(q) ||
-        c.value.toLowerCase().includes(q) ||
-        c.tags.some(t => t.toLowerCase().includes(q))
+        (c.title || '').toLowerCase().includes(q) ||
+        (c.value || '').toLowerCase().includes(q) ||
+        (c.category || '').toLowerCase().includes(q) ||
+        (Array.isArray(c.tags) ? c.tags : []).some(t => t.toLowerCase().includes(q))
       );
     }
     if (activeCategory !== 'all') {

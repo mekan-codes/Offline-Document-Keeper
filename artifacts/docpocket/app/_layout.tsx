@@ -9,7 +9,6 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -33,7 +32,8 @@ function AppContent() {
 }
 
 function AppWithLock() {
-  const { isLocked, isPinSetup } = useAppLock();
+  const { isLocked, isPinSetup, ready } = useAppLock();
+  if (!ready) return null;
   return (
     <>
       <AppContent />
@@ -62,19 +62,17 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <KeyboardProvider>
-            <SettingsProvider>
-              <AppLockProvider>
-                <VaultProvider>
-                  <InfoProvider>
-                    <KitsProvider>
-                      <AppWithLock />
-                    </KitsProvider>
-                  </InfoProvider>
-                </VaultProvider>
-              </AppLockProvider>
-            </SettingsProvider>
-          </KeyboardProvider>
+          <SettingsProvider>
+            <AppLockProvider>
+              <VaultProvider>
+                <InfoProvider>
+                  <KitsProvider>
+                    <AppWithLock />
+                  </KitsProvider>
+                </InfoProvider>
+              </VaultProvider>
+            </AppLockProvider>
+          </SettingsProvider>
         </GestureHandlerRootView>
       </ErrorBoundary>
     </SafeAreaProvider>

@@ -13,6 +13,65 @@ function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function normalizeChecklistItems(value: unknown): ChecklistItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const text = typeof item.text === 'string' ? item.text : '';
+    if (!text.trim()) return [];
+    return [{
+      id: typeof item.id === 'string' ? item.id : genId(),
+      text,
+      isDone: item.isDone === true,
+    }];
+  });
+}
+
+function normalizeRequiredItems(value: unknown): RequiredItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const label = typeof item.label === 'string' ? item.label : '';
+    if (!label.trim()) return [];
+    const requiredItem: RequiredItem = {
+      id: typeof item.id === 'string' ? item.id : genId(),
+      label,
+      manuallyDone: item.manuallyDone === true,
+    };
+    if (typeof item.linkedFileId === 'string') requiredItem.linkedFileId = item.linkedFileId;
+    if (typeof item.linkedInfoCardId === 'string') requiredItem.linkedInfoCardId = item.linkedInfoCardId;
+    return [requiredItem];
+  });
+}
+
+function normalizeKit(value: unknown): Kit {
+  if (!isRecord(value)) throw new BackupValidationError('Backup contains a kit that is not an object.');
+  const now = new Date().toISOString();
+  const name = typeof value.name === 'string' && value.name.trim() ? value.name : 'Imported Kit';
+  return {
+    id: typeof value.id === 'string' ? value.id : genId(),
+    name,
+    color: typeof value.color === 'string' ? value.color : '#3B82F6',
+    icon: typeof value.icon === 'string' ? value.icon : 'briefcase',
+    fileIds: stringArray(value.fileIds),
+    infoCardIds: stringArray(value.infoCardIds),
+    checklistItems: normalizeChecklistItems(value.checklistItems),
+    requiredItems: normalizeRequiredItems(value.requiredItems),
+    requirementsNote: typeof value.requirementsNote === 'string' ? value.requirementsNote : '',
+    note: typeof value.note === 'string' ? value.note : '',
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : now,
+    updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : now,
+  };
+}
+
 // ─── Files ───────────────────────────────────────────────────────────────────
 
 export async function getFiles(): Promise<DocumentFile[]> {
@@ -51,7 +110,14 @@ export async function deleteFile(id: string): Promise<void> {
 }
 
 export async function deleteFileAndCleanKits(id: string): Promise<void> {
-  await deleteFile(id);
+  const files = await getFiles();
+  const file = files.find(f => f.id === id);
+  if (file?.localUri) {
+    try {
+      await FileSystem.deleteAsync(file.localUri, { idempotent: true });
+    } catch {}
+  }
+  await saveFiles(files.filter(f => f.id !== id));
   const kits = await getKits();
   const updated = kits.map(k => ({
     ...k,
@@ -119,21 +185,32 @@ export async function getKits(): Promise<Kit[]> {
   try {
     const raw = await AsyncStorage.getItem(KEYS.KITS);
     if (!raw) return [];
-    const kits = JSON.parse(raw) as Kit[];
-    return kits.map(k => ({ ...k, requiredItems: k.requiredItems ?? [] }));
+    const kits = JSON.parse(raw) as unknown;
+    return Array.isArray(kits) ? kits.map(normalizeKit) : [];
   } catch {
     return [];
   }
 }
 
 export async function saveKits(kits: Kit[]): Promise<void> {
-  await AsyncStorage.setItem(KEYS.KITS, JSON.stringify(kits));
+  await AsyncStorage.setItem(KEYS.KITS, JSON.stringify(kits.map(normalizeKit)));
 }
 
 export async function addKit(data: Omit<Kit, 'id' | 'createdAt' | 'updatedAt'>): Promise<Kit> {
   const kits = await getKits();
   const now = new Date().toISOString();
-  const kit: Kit = { ...data, requiredItems: data.requiredItems ?? [], id: genId(), createdAt: now, updatedAt: now };
+  const kit: Kit = normalizeKit({
+    ...data,
+    fileIds: data.fileIds ?? [],
+    infoCardIds: data.infoCardIds ?? [],
+    checklistItems: data.checklistItems ?? [],
+    requiredItems: data.requiredItems ?? [],
+    requirementsNote: data.requirementsNote ?? '',
+    note: data.note ?? '',
+    id: genId(),
+    createdAt: now,
+    updatedAt: now,
+  });
   await saveKits([...kits, kit]);
   return kit;
 }
@@ -217,23 +294,33 @@ export class BackupValidationError extends Error {
   }
 }
 
-function validateBackup(data: unknown): asserts data is {
-  version: number;
-  files: unknown[];
-  infoCards: unknown[];
-  kits: unknown[];
-  settings?: unknown;
+interface NormalizedBackup {
+  version: unknown;
+  files: DocumentFile[];
+  infoCards: InfoCard[];
+  kits: Kit[];
+  settings?: AppSettings;
   exportedAt?: string;
-} {
+}
+
+function normalizeBackup(data: unknown): NormalizedBackup {
   if (!data || typeof data !== 'object') throw new BackupValidationError('Backup is not a valid JSON object.');
   const d = data as Record<string, unknown>;
-  if (!d.version) throw new BackupValidationError('Backup is missing a version field.');
+  if (d.version === undefined || d.version === null) throw new BackupValidationError('Backup is missing a version field.');
   if (!Array.isArray(d.files)) throw new BackupValidationError('Backup "files" field is missing or not an array.');
   if (!Array.isArray(d.infoCards)) throw new BackupValidationError('Backup "infoCards" field is missing or not an array.');
   if (!Array.isArray(d.kits)) throw new BackupValidationError('Backup "kits" field is missing or not an array.');
-  if (d.settings !== undefined && (typeof d.settings !== 'object' || Array.isArray(d.settings))) {
+  if (d.settings !== undefined && (!isRecord(d.settings))) {
     throw new BackupValidationError('Backup "settings" field is present but not a valid object.');
   }
+  return {
+    version: d.version,
+    files: d.files as DocumentFile[],
+    infoCards: d.infoCards as InfoCard[],
+    kits: d.kits.map(normalizeKit),
+    settings: d.settings ? { ...DEFAULT_SETTINGS, ...(d.settings as Partial<AppSettings>) } : undefined,
+    exportedAt: typeof d.exportedAt === 'string' ? d.exportedAt : undefined,
+  };
 }
 
 export async function previewBackup(json: string): Promise<BackupPreview> {
@@ -243,13 +330,13 @@ export async function previewBackup(json: string): Promise<BackupPreview> {
   } catch {
     throw new BackupValidationError('File is not valid JSON.');
   }
-  validateBackup(data);
+  const backup = normalizeBackup(data);
   return {
-    fileCount: data.files.length,
-    infoCardCount: data.infoCards.length,
-    kitCount: data.kits.length,
-    exportedAt: data.exportedAt || 'Unknown',
-    hasSettings: Boolean(data.settings),
+    fileCount: backup.files.length,
+    infoCardCount: backup.infoCards.length,
+    kitCount: backup.kits.length,
+    exportedAt: backup.exportedAt || 'Unknown',
+    hasSettings: Boolean(backup.settings),
   };
 }
 
@@ -260,19 +347,29 @@ export async function importBackup(json: string): Promise<BackupPreview> {
   } catch {
     throw new BackupValidationError('File is not valid JSON.');
   }
-  validateBackup(data);
-  await Promise.all([
-    saveFiles(data.files as DocumentFile[]),
-    saveInfoCards(data.infoCards as InfoCard[]),
-    saveKits(data.kits as Kit[]),
-    data.settings ? saveSettings({ ...DEFAULT_SETTINGS, ...(data.settings as AppSettings) }) : Promise.resolve(),
-  ]);
+  const backup = normalizeBackup(data);
+  const entries: [string, string][] = [
+    [KEYS.FILES, JSON.stringify(backup.files)],
+    [KEYS.INFO_CARDS, JSON.stringify(backup.infoCards)],
+    [KEYS.KITS, JSON.stringify(backup.kits)],
+  ];
+  if (backup.settings) entries.push([KEYS.SETTINGS, JSON.stringify(backup.settings)]);
+  const current = await AsyncStorage.multiGet([KEYS.FILES, KEYS.INFO_CARDS, KEYS.KITS, KEYS.SETTINGS]);
+  try {
+    await AsyncStorage.multiSet(entries);
+  } catch (error) {
+    const restoreEntries = current.filter((entry): entry is [string, string] => entry[1] !== null);
+    const removeKeys = current.filter((entry) => entry[1] === null).map(([key]) => key);
+    if (restoreEntries.length > 0) await AsyncStorage.multiSet(restoreEntries);
+    if (removeKeys.length > 0) await AsyncStorage.multiRemove(removeKeys);
+    throw error;
+  }
   return {
-    fileCount: data.files.length,
-    infoCardCount: data.infoCards.length,
-    kitCount: data.kits.length,
-    exportedAt: data.exportedAt || '',
-    hasSettings: Boolean(data.settings),
+    fileCount: backup.files.length,
+    infoCardCount: backup.infoCards.length,
+    kitCount: backup.kits.length,
+    exportedAt: backup.exportedAt || '',
+    hasSettings: Boolean(backup.settings),
   };
 }
 

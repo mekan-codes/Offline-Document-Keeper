@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Platform, Alert, TextInput, ActivityIndicator, Image,
+  Platform, Alert, TextInput, ActivityIndicator, Image, Modal, FlatList,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,16 +12,20 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useColors } from '@/hooks/useColors';
 import { useVault } from '@/contexts/VaultContext';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useKits } from '@/contexts/KitsContext';
 import { FILE_CATEGORY_CONFIG, EXPIRY_STATUS, getExpiryStatus } from '@/constants/categories';
 import type { FileCategory } from '@/types';
 
 export default function FileDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; private?: string }>();
+  const { id } = params;
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { files, updateFileById, deleteFileById } = useVault();
   const { settings } = useSettings();
+  const { kits, updateKitById, refreshKits } = useKits();
   const file = files.find(f => f.id === id);
+  const fromPrivateVault = params.private === '1';
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(file?.name || '');
@@ -31,6 +35,7 @@ export default function FileDetailScreen() {
   const [editSensitive, setEditSensitive] = useState(file?.isSensitive ?? false);
   const [editFavorite, setEditFavorite] = useState(file?.isFavorite ?? false);
   const [compressing, setCompressing] = useState(false);
+  const [showKitModal, setShowKitModal] = useState(false);
 
   const s = styles(colors, colors.radius);
 
@@ -50,6 +55,7 @@ export default function FileDetailScreen() {
   const expiry = expiryStatus ? EXPIRY_STATUS[expiryStatus] : null;
   const isImage = file.mimeType?.startsWith('image/');
   const isPdf = file.mimeType?.includes('pdf');
+  const shouldHidePreview = file.isSensitive && settings.privacyMode && !fromPrivateVault;
 
   const handleStartEditing = () => {
     setEditName(file.name);
@@ -88,12 +94,24 @@ export default function FileDetailScreen() {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
-          try { await FileSystem.deleteAsync(file.localUri, { idempotent: true }); } catch {}
           await deleteFileById(file.id);
+          await refreshKits();
           router.back();
         }
       },
     ]);
+  };
+
+  const handleAddToKit = async (kitId: string) => {
+    const target = kits.find(k => k.id === kitId);
+    if (!target) return;
+    if (target.fileIds.includes(file.id)) {
+      Alert.alert('Already Added', `"${file.name}" is already in "${target.name}".`);
+      return;
+    }
+    await updateKitById(target.id, { fileIds: [...target.fileIds, file.id] });
+    setShowKitModal(false);
+    Alert.alert('Added to Kit', `"${file.name}" was added to "${target.name}".`);
   };
 
   const handleCompress = async () => {
@@ -168,7 +186,15 @@ export default function FileDetailScreen() {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
-        {isImage && (
+        {isImage && shouldHidePreview && (
+          <View style={[s.lockedPreview, { backgroundColor: colors.muted }]}>
+            <Ionicons name="lock-closed" size={42} color={colors.mutedForeground} />
+            <Text style={s.lockedPreviewTitle}>Sensitive Document</Text>
+            <Text style={s.lockedPreviewSub}>Open from Private Vault to preview while Privacy Mode is on.</Text>
+          </View>
+        )}
+
+        {isImage && !shouldHidePreview && (
           <View style={s.previewWrap}>
             <Image source={{ uri: file.localUri }} style={s.preview} resizeMode="contain" />
           </View>
@@ -236,7 +262,7 @@ export default function FileDetailScreen() {
                 {file.isSensitive && (
                   <View style={[s.sensitiveBadge, { backgroundColor: '#EF444420' }]}>
                     <Ionicons name="lock-closed" size={11} color="#EF4444" />
-                    <Text style={[s.sensitiveBadgeText, { color: '#EF4444' }]}>Private</Text>
+                    <Text style={[s.sensitiveBadgeText, { color: '#EF4444' }]}>Sensitive</Text>
                   </View>
                 )}
                 {file.isFavorite && (
@@ -269,6 +295,18 @@ export default function FileDetailScreen() {
                   </View>
                 )}
               </View>
+
+              <View style={s.toolsSection}>
+                <Text style={s.toolsTitle}>Actions</Text>
+                <TouchableOpacity style={[s.toolBtn, { borderColor: colors.border }]} onPress={() => setShowKitModal(true)}>
+                  <Ionicons name="briefcase-outline" size={18} color={colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.toolBtnLabel}>Add to Kit</Text>
+                    <Text style={s.toolBtnSub}>Link this file to a visa, school, travel, or custom kit</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              </View>
             </>
           )}
 
@@ -286,6 +324,49 @@ export default function FileDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal visible={showKitModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowKitModal(false)}>
+        <View style={[s.kitModal, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
+          <View style={s.kitModalHeader}>
+            <TouchableOpacity onPress={() => setShowKitModal(false)}>
+              <Ionicons name="close" size={24} color={colors.foreground} />
+            </TouchableOpacity>
+            <Text style={s.kitModalTitle}>Add to Kit</Text>
+            <View style={{ width: 24 }} />
+          </View>
+          <FlatList
+            data={kits}
+            keyExtractor={kit => kit.id}
+            contentContainerStyle={[s.kitList, kits.length === 0 && { flex: 1 }]}
+            ListEmptyComponent={
+              <View style={s.emptyKitList}>
+                <Ionicons name="briefcase-outline" size={42} color={colors.mutedForeground} />
+                <Text style={s.emptyKitText}>No kits yet. Create a kit first from the Kits tab.</Text>
+              </View>
+            }
+            renderItem={({ item: kit }) => {
+              const alreadyAdded = kit.fileIds.includes(file.id);
+              return (
+                <TouchableOpacity
+                  style={[s.kitRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => handleAddToKit(kit.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[s.kitRowIcon, { backgroundColor: kit.color + '22' }]}>
+                    <Ionicons name={kit.icon as any} size={20} color={kit.color} />
+                  </View>
+                  <Text style={s.kitRowName} numberOfLines={1}>{kit.name}</Text>
+                  {alreadyAdded ? (
+                    <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                  ) : (
+                    <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -302,6 +383,9 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   scroll: { flex: 1 },
   previewWrap: { height: 260, backgroundColor: colors.muted, justifyContent: 'center', alignItems: 'center' },
   preview: { width: '100%', height: 260 },
+  lockedPreview: { height: 260, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, gap: 8 },
+  lockedPreviewTitle: { fontSize: 17, fontWeight: '700', color: colors.foreground, fontFamily: 'Inter_700Bold' },
+  lockedPreviewSub: { fontSize: 13, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 19 },
   iconPreview: { height: 180, justifyContent: 'center', alignItems: 'center', gap: 8 },
   iconPreviewText: { fontSize: 16, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
   body: { padding: 20 },
@@ -326,6 +410,15 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: radius, borderWidth: 1, backgroundColor: colors.card },
   toolBtnLabel: { fontSize: 15, fontWeight: '500', color: colors.foreground, fontFamily: 'Inter_500Medium' },
   toolBtnSub: { fontSize: 12, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  kitModal: { flex: 1 },
+  kitModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+  kitModalTitle: { fontSize: 17, fontWeight: '600', color: colors.foreground, fontFamily: 'Inter_600SemiBold' },
+  kitList: { padding: 16 },
+  emptyKitList: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 32 },
+  emptyKitText: { color: colors.mutedForeground, textAlign: 'center', fontFamily: 'Inter_400Regular', fontSize: 14 },
+  kitRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius, borderWidth: 1, marginBottom: 8 },
+  kitRowIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  kitRowName: { flex: 1, fontSize: 15, color: colors.foreground, fontFamily: 'Inter_500Medium' },
   label: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginBottom: 6, marginTop: 16 },
   input: { borderWidth: 1, borderRadius: radius, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, fontFamily: 'Inter_400Regular', backgroundColor: colors.card },
   textarea: { height: 80, paddingTop: 11, textAlignVertical: 'top' },

@@ -4,7 +4,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Animated, { useSharedValue, withSequence, withTiming, useAnimatedStyle } from 'react-native-reanimated';
 import { useColors } from '@/hooks/useColors';
 
 const KEYS = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
@@ -21,19 +20,9 @@ interface PINPadProps {
 export function PINPad({ title, subtitle, onComplete, onCancel, error, maxLength = 6 }: PINPadProps) {
   const colors = useColors();
   const [pin, setPin] = useState('');
-  const shakeX = useSharedValue(0);
-
-  const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shakeX.value }] }));
 
   useEffect(() => {
     if (error) {
-      shakeX.value = withSequence(
-        withTiming(-10, { duration: 50 }),
-        withTiming(10, { duration: 50 }),
-        withTiming(-8, { duration: 50 }),
-        withTiming(8, { duration: 50 }),
-        withTiming(0, { duration: 50 }),
-      );
       setPin('');
     }
   }, [error]);
@@ -59,11 +48,11 @@ export function PINPad({ title, subtitle, onComplete, onCancel, error, maxLength
       <Text style={s.title}>{title}</Text>
       {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
 
-      <Animated.View style={[s.dotsRow, shakeStyle]}>
+      <View style={s.dotsRow}>
         {Array.from({ length: maxLength }).map((_, i) => (
           <View key={i} style={[s.dot, i < pin.length && s.dotFilled]} />
         ))}
-      </Animated.View>
+      </View>
 
       {error ? <Text style={s.errorText}>{error}</Text> : null}
 

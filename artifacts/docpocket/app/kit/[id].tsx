@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Platform, Alert, TextInput, Modal, FlatList,
@@ -39,6 +39,10 @@ export default function KitDetailScreen() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareSelectedIds, setShareSelectedIds] = useState<string[]>([]);
   const [showLinkFileForReqId, setShowLinkFileForReqId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editingReq) setReqNote(kit?.requirementsNote || '');
+  }, [kit?.id, kit?.requirementsNote, editingReq]);
 
   if (!kit) {
     return (
@@ -105,7 +109,7 @@ export default function KitDetailScreen() {
 
   const handleSharePackage = () => {
     if (kitFiles.length === 0) { Alert.alert('No files', 'Add files to this kit first before sharing.'); return; }
-    setShareSelectedIds([...kit.fileIds]);
+    setShareSelectedIds(kitFiles.map(f => f.id));
     setShowShareModal(true);
   };
 
@@ -117,7 +121,7 @@ export default function KitDetailScreen() {
     if (toShare.length > 1) {
       Alert.alert(
         'Share Files One by One',
-        `Multi-file sharing is not supported. Each file will open a separate share sheet (${toShare.length} files).\n\nContinue?`,
+        `Android may open the share sheet one file at a time. ${toShare.length} share sheets may open.\n\nContinue?`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Share All', onPress: async () => {
@@ -176,7 +180,9 @@ export default function KitDetailScreen() {
 
   const handleToggleRequiredItem = async (reqId: string) => {
     const updated = requiredItems.map(ri =>
-      ri.id === reqId ? { ...ri, manuallyDone: !ri.manuallyDone, linkedFileId: undefined, linkedInfoCardId: undefined } : ri
+      ri.id === reqId
+        ? { ...ri, manuallyDone: !isRequiredItemSatisfied(ri), linkedFileId: undefined, linkedInfoCardId: undefined }
+        : ri
     );
     await updateKitById(kit.id, { requiredItems: updated });
   };
@@ -185,7 +191,7 @@ export default function KitDetailScreen() {
     const updated = requiredItems.map(ri =>
       ri.id === reqId ? { ...ri, linkedFileId: fileId, manuallyDone: false } : ri
     );
-    await updateKitById(kit.id, { requiredItems: updated });
+    await updateKitById(kit.id, { requiredItems: updated, fileIds: Array.from(new Set([...kit.fileIds, fileId])) });
     setShowLinkFileForReqId(null);
   };
 
@@ -226,11 +232,13 @@ export default function KitDetailScreen() {
           </View>
         </View>
 
-        {missingItems.length > 0 && (
-          <View style={[s.missingBanner, { backgroundColor: '#EF444412', borderColor: '#EF444430' }]}>
-            <Ionicons name="alert-circle-outline" size={16} color="#EF4444" />
+        {requiredItems.length > 0 && (
+          <View style={[s.missingBanner, { backgroundColor: missingItems.length > 0 ? '#EF444412' : '#10B98112', borderColor: missingItems.length > 0 ? '#EF444430' : '#10B98130' }]}>
+            <Ionicons name={missingItems.length > 0 ? 'alert-circle-outline' : 'checkmark-circle-outline'} size={16} color={missingItems.length > 0 ? '#EF4444' : '#10B981'} />
             <View style={{ flex: 1 }}>
-              <Text style={s.missingTitle}>Missing required items:</Text>
+              <Text style={[s.missingTitle, { color: missingItems.length > 0 ? '#EF4444' : '#10B981' }]}>
+                {missingItems.length > 0 ? 'Missing:' : 'All required items ready'}
+              </Text>
               {missingItems.map(ri => (
                 <Text key={ri.id} style={s.missingItem}>• {ri.label}</Text>
               ))}
@@ -390,20 +398,29 @@ export default function KitDetailScreen() {
         <View style={s.section}>
           <View style={s.sectionHeader}>
             <Text style={s.sectionTitle}>Requirements</Text>
-            <TouchableOpacity onPress={async () => {
-              if (editingReq) { await updateKitById(kit.id, { requirementsNote: reqNote }); }
-              setEditingReq(!editingReq);
-            }}>
-              <Ionicons name={editingReq ? 'checkmark-circle' : 'pencil-outline'} size={20} color={colors.primary} />
-            </TouchableOpacity>
+            {!editingReq && (
+              <TouchableOpacity style={[s.reqEditBtn, { borderColor: colors.primary }]} onPress={() => { setReqNote(kit.requirementsNote || ''); setEditingReq(true); }}>
+                <Text style={[s.reqEditText, { color: colors.primary }]}>Edit</Text>
+              </TouchableOpacity>
+            )}
           </View>
           {editingReq ? (
-            <TextInput
-              style={[s.reqInput, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.card }]}
-              value={reqNote} onChangeText={setReqNote} multiline
-              placeholder="Add requirements: photo size, file format, deadlines..."
-              placeholderTextColor={colors.mutedForeground} textAlignVertical="top"
-            />
+            <>
+              <TextInput
+                style={[s.reqInput, { borderColor: colors.border, color: colors.foreground, backgroundColor: colors.card }]}
+                value={reqNote} onChangeText={setReqNote} multiline
+                placeholder="Add requirements: photo size, file format, deadlines..."
+                placeholderTextColor={colors.mutedForeground} textAlignVertical="top"
+              />
+              <View style={s.reqActions}>
+                <TouchableOpacity style={[s.reqActionBtn, { borderColor: colors.border }]} onPress={() => { setReqNote(kit.requirementsNote || ''); setEditingReq(false); }}>
+                  <Text style={[s.reqActionText, { color: colors.mutedForeground }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.reqActionBtn, { borderColor: colors.primary, backgroundColor: colors.primary }]} onPress={async () => { await updateKitById(kit.id, { requirementsNote: reqNote }); setEditingReq(false); }}>
+                  <Text style={[s.reqActionText, { color: '#fff' }]}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           ) : (
             <Text style={[s.reqText, { color: kit.requirementsNote ? colors.foreground : colors.mutedForeground }]}>
               {kit.requirementsNote || 'No requirements added. Tap edit to add photo sizes, deadlines, format rules.'}
@@ -437,7 +454,7 @@ export default function KitDetailScreen() {
             </TouchableOpacity>
           </View>
           <Text style={[s.shareModalSub, { color: colors.mutedForeground }]}>
-            Select files to share. Each file opens a separate share sheet.
+            Select files to share. Android may open the share sheet one file at a time.
           </Text>
           <FlatList
             data={kitFiles}
@@ -554,6 +571,11 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   addBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   reqInput: { borderWidth: 1, borderRadius: radius, padding: 14, fontSize: 14, fontFamily: 'Inter_400Regular', minHeight: 100 },
   reqText: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 21 },
+  reqEditBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
+  reqEditText: { fontSize: 13, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
+  reqActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 },
+  reqActionBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius, borderWidth: 1 },
+  reqActionText: { fontSize: 14, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
   shareModal: { flex: 1 },
   shareModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   shareModalTitle: { fontSize: 17, fontWeight: '600', color: colors.foreground, fontFamily: 'Inter_600SemiBold' },

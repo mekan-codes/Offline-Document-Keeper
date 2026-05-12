@@ -4,18 +4,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/hooks/useColors';
 import { useAppLock } from '@/contexts/AppLockContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { PINPad } from './PINPad';
 
 export function LockScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { unlockWithPin, unlockWithBiometrics, hasBiometrics, pinError, clearPinError } = useAppLock();
+  const { unlockWithPin, unlockWithBiometrics, hasBiometrics, pinError } = useAppLock();
+  const { settings } = useSettings();
 
   useEffect(() => {
-    if (hasBiometrics) {
+    if (hasBiometrics && settings.biometricEnabled) {
       unlockWithBiometrics();
     }
-  }, []);
+  }, [hasBiometrics, settings.biometricEnabled]);
 
   const s = styles(colors);
 
@@ -36,7 +38,7 @@ export function LockScreen() {
         error={pinError}
       />
 
-      {hasBiometrics && Platform.OS !== 'web' && (
+      {hasBiometrics && settings.biometricEnabled && Platform.OS !== 'web' && (
         <TouchableOpacity style={s.biometricBtn} onPress={unlockWithBiometrics}>
           <Ionicons name="finger-print" size={32} color={colors.primary} />
           <Text style={s.biometricText}>Use Biometrics</Text>

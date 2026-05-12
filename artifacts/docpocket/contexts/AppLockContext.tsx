@@ -37,6 +37,7 @@ async function clearHash(): Promise<void> {
 
 interface AppLockContextValue {
   isLocked: boolean;
+  ready: boolean;
   isPinSetup: boolean;
   hasBiometrics: boolean;
   lock: () => void;
@@ -45,6 +46,7 @@ interface AppLockContextValue {
   setupPin: (pin: string) => Promise<void>;
   changePin: (oldPin: string, newPin: string) => Promise<boolean>;
   disablePin: (pin: string) => Promise<boolean>;
+  resetLockState: () => Promise<void>;
   pinError: string | null;
   clearPinError: () => void;
 }
@@ -54,6 +56,7 @@ const AppLockContext = createContext<AppLockContextValue | null>(null);
 export function AppLockProvider({ children }: { children: ReactNode }) {
   const { settings, loaded } = useSettings();
   const [isLocked, setIsLocked] = useState(false);
+  const [ready, setReady] = useState(false);
   const [isPinSetup, setIsPinSetup] = useState(false);
   const [hasBiometrics, setHasBiometrics] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
@@ -61,27 +64,39 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   const initialized = useRef(false);
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded) {
+      setReady(false);
+      return;
+    }
+    let cancelled = false;
+    if (!initialized.current) setReady(false);
 
     async function init() {
       const hash = await getStoredHash();
+      if (cancelled) return;
       const pinExists = hash !== null;
       setIsPinSetup(pinExists);
-      if (pinExists && settings.pinEnabled) {
-        setIsLocked(true);
+      if (!initialized.current) {
+        setIsLocked(pinExists && settings.pinEnabled);
+      } else if (!settings.pinEnabled) {
+        setIsLocked(false);
       }
 
       try {
         const hasHW = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        if (cancelled) return;
         setHasBiometrics(hasHW && isEnrolled);
       } catch {
+        if (cancelled) return;
         setHasBiometrics(false);
       }
       initialized.current = true;
+      setReady(true);
     }
     init();
-  }, [loaded]);
+    return () => { cancelled = true; };
+  }, [loaded, settings.pinEnabled]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
@@ -161,13 +176,22 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
+  const resetLockState = async (): Promise<void> => {
+    try { await clearHash(); } catch {}
+    setIsPinSetup(false);
+    setIsLocked(false);
+    setReady(true);
+    setPinError(null);
+    backgroundTimestamp.current = null;
+  };
+
   const clearPinError = () => setPinError(null);
 
   const value = useMemo(() => ({
-    isLocked, isPinSetup, hasBiometrics,
+    isLocked, ready, isPinSetup, hasBiometrics,
     lock, unlockWithPin, unlockWithBiometrics,
-    setupPin, changePin, disablePin, pinError, clearPinError,
-  }), [isLocked, isPinSetup, hasBiometrics, pinError]);
+    setupPin, changePin, disablePin, resetLockState, pinError, clearPinError,
+  }), [isLocked, ready, isPinSetup, hasBiometrics, pinError, settings.pinEnabled]);
 
   return <AppLockContext.Provider value={value}>{children}</AppLockContext.Provider>;
 }

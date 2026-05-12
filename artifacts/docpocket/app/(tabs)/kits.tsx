@@ -11,12 +11,27 @@ import { useKits } from '@/contexts/KitsContext';
 import { KitCard } from '@/components/KitCard';
 import { EmptyState } from '@/components/EmptyState';
 import { AddKitModal } from '@/components/AddKitModal';
+import { SearchBar } from '@/components/SearchBar';
 
 export default function KitsTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { kits, loading } = useKits();
   const [showAdd, setShowAdd] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredKits = searchQuery.trim()
+    ? kits.filter((kit) => {
+      const q = searchQuery.toLowerCase();
+      return (
+        kit.name.toLowerCase().includes(q) ||
+        (kit.note || '').toLowerCase().includes(q) ||
+        (kit.requirementsNote || '').toLowerCase().includes(q) ||
+        (kit.checklistItems || []).some(item => item.text.toLowerCase().includes(q)) ||
+        (kit.requiredItems || []).some(item => item.label.toLowerCase().includes(q))
+      );
+    })
+    : kits;
 
   const s = styles(colors);
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
@@ -26,7 +41,7 @@ export default function KitsTab() {
       <View style={s.header}>
         <View>
           <Text style={s.headerTitle}>Kits</Text>
-          <Text style={s.headerSub}>{kits.length} kit{kits.length !== 1 ? 's' : ''}</Text>
+          <Text style={s.headerSub}>{filteredKits.length} kit{filteredKits.length !== 1 ? 's' : ''}</Text>
         </View>
         <TouchableOpacity style={[s.addBtn, { backgroundColor: colors.primary }]} onPress={() => setShowAdd(true)}>
           <Ionicons name="add" size={22} color="#fff" />
@@ -34,17 +49,18 @@ export default function KitsTab() {
       </View>
 
       <Text style={s.hint}>Situation-based collections of files and info you need in one place</Text>
+      <SearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Search kits, requirements, checklist..." />
 
       {loading ? (
         <View style={s.loader}><ActivityIndicator color={colors.primary} size="large" /></View>
       ) : (
         <FlatList
-          data={kits}
+          data={filteredKits}
           keyExtractor={k => k.id}
           renderItem={({ item }) => (
             <KitCard kit={item} onPress={() => router.push(`/kit/${item.id}`)} />
           )}
-          contentContainerStyle={[s.list, kits.length === 0 && { flex: 1 }]}
+          contentContainerStyle={[s.list, filteredKits.length === 0 && { flex: 1 }]}
           ListEmptyComponent={
             <EmptyState
               icon="briefcase-outline"
@@ -53,7 +69,7 @@ export default function KitsTab() {
             />
           }
           showsVerticalScrollIndicator={false}
-          scrollEnabled={kits.length > 0}
+          scrollEnabled={filteredKits.length > 0}
         />
       )}
 

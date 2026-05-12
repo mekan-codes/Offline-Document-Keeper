@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { getFiles, saveFiles, addFile, updateFile, deleteFileAndCleanKits } from '@/storage/db';
+import { getFiles, addFile, updateFile, deleteFileAndCleanKits } from '@/storage/db';
 import type { DocumentFile } from '@/types';
 
 interface VaultContextValue {
@@ -54,10 +54,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(f =>
-        f.name.toLowerCase().includes(q) ||
-        f.tags.some(t => t.toLowerCase().includes(q)) ||
-        f.note.toLowerCase().includes(q) ||
-        f.category.includes(q)
+        (f.name || '').toLowerCase().includes(q) ||
+        (f.originalFileName || '').toLowerCase().includes(q) ||
+        (Array.isArray(f.tags) ? f.tags : []).some(t => t.toLowerCase().includes(q)) ||
+        (f.note || '').toLowerCase().includes(q) ||
+        (f.requirementsNote || '').toLowerCase().includes(q) ||
+        (f.category || '').toLowerCase().includes(q)
       );
     }
     if (activeFilter === 'all') return result;

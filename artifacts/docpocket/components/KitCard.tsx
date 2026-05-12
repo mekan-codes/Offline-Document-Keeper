@@ -16,11 +16,17 @@ export function KitCard({ kit, onPress }: KitCardProps) {
   const { files } = useVault();
   const { cards } = useInfo();
 
-  const total = kit.fileIds.length + kit.infoCardIds.length + kit.checklistItems.length;
+  const requiredItems = kit.requiredItems || [];
+  const total = kit.fileIds.length + kit.infoCardIds.length + kit.checklistItems.length + requiredItems.length;
   const fileReady = kit.fileIds.filter(id => files.find(f => f.id === id)).length;
   const infoReady = kit.infoCardIds.filter(id => cards.find(c => c.id === id)).length;
   const checkDone = kit.checklistItems.filter(i => i.isDone).length;
-  const ready = fileReady + infoReady + checkDone;
+  const requiredReady = requiredItems.filter(item =>
+    item.manuallyDone ||
+    (item.linkedFileId && files.some(f => f.id === item.linkedFileId)) ||
+    (item.linkedInfoCardId && cards.some(c => c.id === item.linkedInfoCardId))
+  ).length;
+  const ready = fileReady + infoReady + checkDone + requiredReady;
 
   const progress = total > 0 ? ready / total : 0;
   const progressColor = progress >= 1 ? '#10B981' : progress >= 0.5 ? '#F59E0B' : colors.destructive;

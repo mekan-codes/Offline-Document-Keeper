@@ -23,8 +23,8 @@ type PINMode = 'setup' | 'change-old' | 'change-new' | 'disable' | 'delete-confi
 export default function SettingsTab() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings } = useSettings();
-  const { isPinSetup, setupPin, changePin, disablePin, hasBiometrics } = useAppLock();
+  const { settings, updateSettings, refreshSettings, resetSettingsState } = useSettings();
+  const { isPinSetup, setupPin, changePin, disablePin, hasBiometrics, resetLockState } = useAppLock();
   const { files, refreshFiles } = useVault();
   const { cards, refreshCards } = useInfo();
   const { kits, refreshKits } = useKits();
@@ -38,6 +38,8 @@ export default function SettingsTab() {
 
   const doDeleteAll = async () => {
     await clearAllData(true);
+    await resetLockState();
+    resetSettingsState();
     await refreshFiles(); await refreshCards(); await refreshKits();
     Alert.alert('Deleted', 'All data and files have been permanently removed.');
   };
@@ -107,13 +109,14 @@ export default function SettingsTab() {
 
       Alert.alert(
         'Import Backup?',
-        `Found:\n• ${preview.fileCount} file records\n• ${preview.infoCardCount} info cards\n• ${preview.kitCount} kits${preview.hasSettings ? '\n• Settings' : ''}\n\nExported: ${preview.exportedAt ? new Date(preview.exportedAt).toLocaleDateString() : 'Unknown'}\n\n⚠️ Note: Physical files are not included in backups. File cards will be restored but the actual files must be re-imported.\n\nThis will replace your current data.`,
+        `Found:\n• ${preview.fileCount} file records\n• ${preview.infoCardCount} info cards\n• ${preview.kitCount} kits${preview.hasSettings ? '\n• Settings' : ''}\n\nExported: ${preview.exportedAt ? new Date(preview.exportedAt).toLocaleDateString() : 'Unknown'}\n\nThis backup saves info cards, kits, and file metadata, but not actual document files.\n\nThis will replace your current data.`,
         [
           { text: 'Cancel', style: 'cancel', onPress: () => setImporting(false) },
           { text: 'Import', style: 'destructive', onPress: async () => {
             try {
               const result = await importBackup(json);
               await refreshFiles(); await refreshCards(); await refreshKits();
+              if (result.hasSettings) await refreshSettings();
               Alert.alert('Import Complete', `Restored:\n• ${result.fileCount} file records\n• ${result.infoCardCount} info cards\n• ${result.kitCount} kits`);
             } catch (err) {
               const msg = err instanceof BackupValidationError ? err.message : 'Backup data is corrupted.';
@@ -255,7 +258,7 @@ export default function SettingsTab() {
 
         <Section title="Theme">
           {([
-            { key: 'system', label: 'System (follow device)', icon: 'contrast-outline' },
+            { key: 'system', label: 'System', icon: 'contrast-outline' },
             { key: 'light', label: 'Light', icon: 'sunny-outline' },
             { key: 'dark', label: 'Dark', icon: 'moon-outline' },
           ] as const).map((t, i) => (
@@ -270,13 +273,20 @@ export default function SettingsTab() {
           ))}
         </Section>
 
-        <Section title="Expiry Warnings">
+        <Section title="Expiry Alert Threshold">
+          <View style={[s.infoBox, { backgroundColor: colors.muted, borderColor: colors.border }]}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.mutedForeground} />
+            <Text style={s.infoText}>
+              Mark documents as expiring soon before this many days. If set to 60 days, a passport expiring within 60 days will show Expiring Soon.
+            </Text>
+          </View>
+          <Divider />
           {[30, 60, 90, 180].map((days, i) => (
             <React.Fragment key={days}>
               {i > 0 && <Divider />}
               <TouchableOpacity style={s.row} onPress={() => updateSettings({ expiryWarningDays: days })}>
                 <Ionicons name="calendar-outline" size={20} color={colors.primary} style={s.rowIcon} />
-                <Text style={[s.rowLabel, { flex: 1 }]}>Warn {days} days before expiry</Text>
+                <Text style={[s.rowLabel, { flex: 1 }]}>{days} days before expiry</Text>
                 {settings.expiryWarningDays === days && <Ionicons name="checkmark" size={20} color={colors.primary} />}
               </TouchableOpacity>
             </React.Fragment>
@@ -287,15 +297,15 @@ export default function SettingsTab() {
           <View style={[s.infoBox, { backgroundColor: colors.muted, borderColor: colors.border }]}>
             <Ionicons name="information-circle-outline" size={16} color={colors.mutedForeground} />
             <Text style={s.infoText}>
-              Backups save info cards, kits, and file metadata — but not the actual document files.
-              Re-import files manually after restoring.
+              This backup saves info cards, kits, and file metadata, but not actual document files.
+              Re-import documents manually after restoring.
             </Text>
           </View>
           <Divider />
-          <Row icon="cloud-upload-outline" label="Export Metadata Backup" sub="Share a JSON backup of cards, kits, and metadata" onPress={handleExportBackup} />
+          <Row icon="archive-outline" label="Export Metadata Backup" sub="Share a JSON backup of cards, kits, and metadata" onPress={handleExportBackup} />
           <Divider />
           <Row
-            icon="cloud-download-outline"
+            icon="folder-open-outline"
             label="Import Backup"
             sub={importing ? 'Reading backup file...' : 'Restore from a previous backup'}
             onPress={importing ? undefined : handleImportBackup}
@@ -345,7 +355,7 @@ export default function SettingsTab() {
           <Row
             icon="trash-outline"
             label="Delete All Data"
-            sub="Permanently removes all files (including physical files), cards, and kits"
+            sub="Permanently removes all files, cards, kits, and settings. Requires PIN if PIN is enabled."
             destructive
             onPress={handleDeleteAll}
           />

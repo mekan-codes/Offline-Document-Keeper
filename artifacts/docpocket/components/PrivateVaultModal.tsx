@@ -47,13 +47,12 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
     if (visible) {
       setAuthenticated(false);
       setPinError(null);
-      if (!isPinSetup) {
-        Alert.alert('PIN Required', 'Set up a PIN in Settings to use the Private Vault.', [{ text: 'OK', onPress: onClose }]);
-        return;
-      }
-      if (hasBiometrics && settings.biometricEnabled && Platform.OS !== 'web') {
+      if (isPinSetup && hasBiometrics && settings.biometricEnabled && Platform.OS !== 'web') {
         tryBiometrics();
       }
+    } else {
+      setAuthenticated(false);
+      setPinError(null);
     }
   }, [visible]);
 
@@ -101,7 +100,7 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
 
   const handleOpenFile = (fileId: string) => {
     handleClose();
-    setTimeout(() => router.push(`/file/${fileId}`), 300);
+    setTimeout(() => router.push({ pathname: '/file/[id]', params: { id: fileId, private: '1' } }), 300);
   };
 
   const handleClose = () => {
@@ -137,7 +136,13 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
           </TouchableOpacity>
         </View>
 
-        {!authenticated ? (
+        {!isPinSetup ? (
+          <View style={s.pinRequired}>
+            <Ionicons name="lock-closed-outline" size={46} color={colors.mutedForeground} />
+            <Text style={s.emptyTitle}>PIN required</Text>
+            <Text style={s.emptySub}>Set up a PIN in Settings to use Private Vault.</Text>
+          </View>
+        ) : !authenticated ? (
           <View style={s.authArea}>
             <PINPad
               title="Private Vault"
@@ -232,6 +237,7 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   lockBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.muted, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   lockText: { fontSize: 13, color: colors.mutedForeground, fontFamily: 'Inter_500Medium' },
   authArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 60 },
+  pinRequired: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
   bioBtn: { marginTop: 28, alignItems: 'center', gap: 8 },
   bioText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   emptyVault: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },

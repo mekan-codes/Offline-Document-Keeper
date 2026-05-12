@@ -13,6 +13,7 @@ interface InfoCardItemProps {
   onEdit: () => void;
   onDelete: () => void;
   onFavorite: () => void;
+  onAddToKit?: () => void;
 }
 
 function maskValue(value: string): string {
@@ -20,7 +21,7 @@ function maskValue(value: string): string {
   return value.slice(0, 2) + '••••' + value.slice(-2);
 }
 
-export function InfoCardItem({ card, onEdit, onDelete, onFavorite }: InfoCardItemProps) {
+export function InfoCardItem({ card, onEdit, onDelete, onFavorite, onAddToKit }: InfoCardItemProps) {
   const colors = useColors();
   const { settings } = useSettings();
   const [revealed, setRevealed] = useState(false);
@@ -96,6 +97,11 @@ export function InfoCardItem({ card, onEdit, onDelete, onFavorite }: InfoCardIte
             <TouchableOpacity style={s.iconBtn} onPress={onEdit}>
               <Ionicons name="pencil-outline" size={14} color={colors.mutedForeground} />
             </TouchableOpacity>
+            {onAddToKit && (
+              <TouchableOpacity style={s.iconBtn} onPress={onAddToKit}>
+                <Ionicons name="briefcase-outline" size={14} color={colors.primary} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={s.iconBtn} onPress={onDelete}>
               <Ionicons name="trash-outline" size={14} color={colors.destructive} />
             </TouchableOpacity>

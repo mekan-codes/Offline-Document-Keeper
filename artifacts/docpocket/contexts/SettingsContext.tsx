@@ -16,6 +16,8 @@ const DEFAULT: AppSettings = {
 interface SettingsContextValue {
   settings: AppSettings;
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
+  refreshSettings: () => Promise<void>;
+  resetSettingsState: () => void;
   effectiveTheme: 'light' | 'dark';
   loaded: boolean;
 }
@@ -40,13 +42,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     await saveSettings(next);
   };
 
+  const refreshSettings = async () => {
+    const next = await getSettings();
+    setSettings(next);
+  };
+
+  const resetSettingsState = () => {
+    setSettings(DEFAULT);
+  };
+
   const effectiveTheme: 'light' | 'dark' = useMemo(() => {
     if (settings.themePreference === 'light') return 'light';
     if (settings.themePreference === 'dark') return 'dark';
     return systemScheme === 'dark' ? 'dark' : 'light';
   }, [settings.themePreference, systemScheme]);
 
-  const value = useMemo(() => ({ settings, updateSettings, effectiveTheme, loaded }), [settings, effectiveTheme, loaded]);
+  const value = useMemo(() => ({ settings, updateSettings, refreshSettings, resetSettingsState, effectiveTheme, loaded }), [settings, effectiveTheme, loaded]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "docpocket",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "android": {
       "package": "com.mekan.docpocket",
       "versionCode": 1,
