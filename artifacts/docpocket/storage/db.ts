@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { DocumentFile, InfoCard, Kit, AppSettings, ChecklistItem, RequiredItem } from '@/types';
 
 const KEYS = {
