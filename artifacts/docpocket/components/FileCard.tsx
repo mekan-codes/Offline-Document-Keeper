@@ -6,6 +6,7 @@ import { useColors } from '@/hooks/useColors';
 import { FILE_CATEGORY_CONFIG, EXPIRY_STATUS, getExpiryStatus } from '@/constants/categories';
 import { useSettings } from '@/contexts/SettingsContext';
 import type { DocumentFile } from '@/types';
+import { hasLocalFile } from '@/utils/files';
 
 interface FileCardProps {
   file: DocumentFile;
@@ -22,6 +23,7 @@ export function FileCard({ file, onPress, onShare, onFavorite }: FileCardProps) 
   const expiry = expiryStatus ? EXPIRY_STATUS[expiryStatus] : null;
   const isPdf = file.mimeType?.includes('pdf');
   const isImage = file.mimeType?.startsWith('image/');
+  const fileAvailable = hasLocalFile(file);
 
   const s = styles(colors, colors.radius);
 
@@ -59,11 +61,14 @@ export function FileCard({ file, onPress, onShare, onFavorite }: FileCardProps) 
           )}
         </View>
         <Text style={s.date}>{new Date(file.updatedAt).toLocaleDateString()}</Text>
+        {!fileAvailable && <Text style={s.warning}>Local file missing</Text>}
       </View>
 
       <View style={s.actions}>
         <TouchableOpacity
           style={s.actionBtn}
+          hitSlop={8}
+          activeOpacity={0.65}
           onPress={(e) => {
             e.stopPropagation();
             if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -78,6 +83,8 @@ export function FileCard({ file, onPress, onShare, onFavorite }: FileCardProps) 
         </TouchableOpacity>
         <TouchableOpacity
           style={s.actionBtn}
+          hitSlop={8}
+          activeOpacity={0.65}
           onPress={(e) => {
             e.stopPropagation();
             if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -116,6 +123,7 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   expiryBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   expiryText: { fontSize: 11, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
   date: { fontSize: 11, color: colors.mutedForeground, marginTop: 4, fontFamily: 'Inter_400Regular' },
+  warning: { fontSize: 11, color: colors.destructive, marginTop: 4, fontFamily: 'Inter_500Medium' },
   actions: { gap: 6 },
-  actionBtn: { padding: 6 },
+  actionBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 });

@@ -50,8 +50,8 @@ export function FilterChips({ chips, active, onSelect }: FilterChipsProps) {
 }
 
 const styles = StyleSheet.create({
-  scroll: { marginBottom: 8 },
-  row: { paddingHorizontal: 16, gap: 8, paddingVertical: 4 },
+  scroll: { flexGrow: 0, marginBottom: 8, maxHeight: 44 },
+  row: { alignItems: 'center', paddingHorizontal: 16, gap: 8, paddingVertical: 4 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 7,
     borderRadius: 20, borderWidth: 1,

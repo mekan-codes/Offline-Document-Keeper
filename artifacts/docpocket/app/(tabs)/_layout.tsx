@@ -20,11 +20,12 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
         tabBarStyle: {
-          position: "absolute",
+          position: isIOS ? "absolute" : "relative",
           backgroundColor: isIOS ? "transparent" : colors.background,
           borderTopWidth: 0,
           borderTopColor: colors.border,
-          elevation: 0,
+          elevation: isIOS ? 0 : 12,
+          zIndex: 20,
           height: isWeb ? 84 : 64,
           paddingBottom: isWeb ? 34 : 8,
         },
@@ -36,12 +37,16 @@ export default function TabLayout() {
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
+              pointerEvents="none"
               intensity={90}
               tint={isDark ? "dark" : "light"}
               style={[StyleSheet.absoluteFill, { borderTopWidth: 0.5, borderTopColor: colors.border }]}
             />
           ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border }]} />
+            <View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border }]}
+            />
           ),
       }}
     >

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { getFiles, addFile, updateFile, deleteFileAndCleanKits } from '@/storage/db';
+import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { addFile, deleteFileAndCleanKits, getFiles, updateFile } from '@/storage/db';
 import type { DocumentFile } from '@/types';
 
 interface VaultContextValue {
@@ -18,15 +18,26 @@ interface VaultContextValue {
 
 const VaultContext = createContext<VaultContextValue | null>(null);
 
+function sortFiles(files: DocumentFile[]): DocumentFile[] {
+  return [...files].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
+
 export function VaultProvider({ children }: { children: ReactNode }) {
-  const [files, setFiles] = useState<DocumentFile[]>([]);
+  const [files, setFilesState] = useState<DocumentFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  const filesRef = useRef<DocumentFile[]>([]);
+
+  const setFiles = (next: DocumentFile[]) => {
+    filesRef.current = next;
+    setFilesState(next);
+  };
 
   const refreshFiles = async () => {
-    const f = await getFiles();
-    setFiles(f.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+    setFiles(sortFiles(await getFiles()));
   };
 
   useEffect(() => {
@@ -35,18 +46,39 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const addNewFile = async (data: Omit<DocumentFile, 'id' | 'createdAt' | 'updatedAt'>) => {
     const file = await addFile(data);
-    await refreshFiles();
+    setFiles(sortFiles([...filesRef.current, file]));
     return file;
   };
 
   const updateFileById = async (id: string, updates: Partial<DocumentFile>) => {
-    await updateFile(id, updates);
-    await refreshFiles();
+    const previous = filesRef.current;
+    const optimistic = sortFiles(
+      previous.map((file) =>
+        file.id === id
+          ? { ...file, ...updates, updatedAt: new Date().toISOString() }
+          : file,
+      ),
+    );
+    setFiles(optimistic);
+
+    try {
+      await updateFile(id, updates);
+    } catch (error) {
+      setFiles(previous);
+      throw error;
+    }
   };
 
   const deleteFileById = async (id: string) => {
-    await deleteFileAndCleanKits(id);
-    await refreshFiles();
+    const previous = filesRef.current;
+    setFiles(previous.filter((file) => file.id !== id));
+
+    try {
+      await deleteFileAndCleanKits(id);
+    } catch (error) {
+      setFiles(previous);
+      throw error;
+    }
   };
 
   const filteredFiles = useMemo(() => {

@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { getInfoCards, addInfoCard, updateInfoCard, deleteInfoCardAndCleanKits } from '@/storage/db';
+import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { addInfoCard, deleteInfoCardAndCleanKits, getInfoCards, updateInfoCard } from '@/storage/db';
 import type { InfoCard } from '@/types';
 
 interface InfoContextValue {
@@ -18,19 +18,28 @@ interface InfoContextValue {
 
 const InfoContext = createContext<InfoContextValue | null>(null);
 
+function sortCards(cards: InfoCard[]): InfoCard[] {
+  return [...cards].sort((a, b) => {
+    if (a.isFavorite && !b.isFavorite) return -1;
+    if (!a.isFavorite && b.isFavorite) return 1;
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
+}
+
 export function InfoProvider({ children }: { children: ReactNode }) {
-  const [cards, setCards] = useState<InfoCard[]>([]);
+  const [cards, setCardsState] = useState<InfoCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
+  const cardsRef = useRef<InfoCard[]>([]);
+
+  const setCards = (next: InfoCard[]) => {
+    cardsRef.current = next;
+    setCardsState(next);
+  };
 
   const refreshCards = async () => {
-    const c = await getInfoCards();
-    setCards(c.sort((a, b) => {
-      if (a.isFavorite && !b.isFavorite) return -1;
-      if (!a.isFavorite && b.isFavorite) return 1;
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    }));
+    setCards(sortCards(await getInfoCards()));
   };
 
   useEffect(() => {
@@ -39,18 +48,39 @@ export function InfoProvider({ children }: { children: ReactNode }) {
 
   const addCard = async (data: Omit<InfoCard, 'id' | 'createdAt' | 'updatedAt'>) => {
     const card = await addInfoCard(data);
-    await refreshCards();
+    setCards(sortCards([...cardsRef.current, card]));
     return card;
   };
 
   const updateCard = async (id: string, updates: Partial<InfoCard>) => {
-    await updateInfoCard(id, updates);
-    await refreshCards();
+    const previous = cardsRef.current;
+    const optimistic = sortCards(
+      previous.map((card) =>
+        card.id === id
+          ? { ...card, ...updates, updatedAt: new Date().toISOString() }
+          : card,
+      ),
+    );
+    setCards(optimistic);
+
+    try {
+      await updateInfoCard(id, updates);
+    } catch (error) {
+      setCards(previous);
+      throw error;
+    }
   };
 
   const deleteCard = async (id: string) => {
-    await deleteInfoCardAndCleanKits(id);
-    await refreshCards();
+    const previous = cardsRef.current;
+    setCards(previous.filter((card) => card.id !== id));
+
+    try {
+      await deleteInfoCardAndCleanKits(id);
+    } catch (error) {
+      setCards(previous);
+      throw error;
+    }
   };
 
   const filteredCards = useMemo(() => {

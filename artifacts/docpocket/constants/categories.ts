@@ -1,4 +1,5 @@
 import type { FileCategory, InfoCategory } from '@/types';
+import { diffCalendarDaysFromToday } from '@/utils/date';
 
 export const FILE_CATEGORY_CONFIG: Record<FileCategory, { label: string; color: string; icon: string }> = {
   identity: { label: 'Identity', color: '#3B82F6', icon: 'person-circle' },
@@ -37,10 +38,8 @@ export const EXPIRY_STATUS = {
 } as const;
 
 export function getExpiryStatus(expiryDate: string | undefined, warningDays: number): keyof typeof EXPIRY_STATUS | null {
-  if (!expiryDate) return null;
-  const now = new Date();
-  const expiry = new Date(expiryDate);
-  const daysLeft = Math.floor((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  const daysLeft = diffCalendarDaysFromToday(expiryDate);
+  if (daysLeft === null) return null;
   if (daysLeft < 0) return 'expired';
   if (daysLeft <= warningDays) return 'soon';
   return 'valid';

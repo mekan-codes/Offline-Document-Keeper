@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Platform, Alert, ActivityIndicator,
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 import { useVault } from '@/contexts/VaultContext';
@@ -19,6 +24,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { AddFileModal } from '@/components/AddFileModal';
 import { PrivateVaultModal } from '@/components/PrivateVaultModal';
 import type { DocumentFile } from '@/types';
+import { getMissingLocalFileMessage, hasLocalFile } from '@/utils/files';
 
 const FILTER_CHIPS = [
   { key: 'all', label: 'All' },
@@ -38,17 +44,26 @@ export default function VaultTab() {
   const insets = useSafeAreaInsets();
   const { settings } = useSettings();
   const {
-    files, filteredFiles, loading, searchQuery, setSearchQuery,
-    activeFilter, setActiveFilter, updateFileById, deleteFileById,
+    files,
+    filteredFiles,
+    loading,
+    searchQuery,
+    setSearchQuery,
+    activeFilter,
+    setActiveFilter,
+    updateFileById,
+    deleteFileById,
   } = useVault();
   const [showAdd, setShowAdd] = useState(false);
   const [showPrivate, setShowPrivate] = useState(false);
 
   const visibleFiles = settings.privacyMode
-    ? filteredFiles.filter(f => !f.isSensitive)
+    ? filteredFiles.filter((file) => !file.isSensitive)
     : filteredFiles;
 
-  const privateCount = settings.privacyMode ? files.filter(f => f.isSensitive).length : 0;
+  const privateCount = settings.privacyMode
+    ? files.filter((file) => file.isSensitive).length
+    : 0;
 
   const handleOpen = async (file: DocumentFile) => {
     await updateFileById(file.id, { lastOpenedAt: new Date().toISOString() });
@@ -56,11 +71,27 @@ export default function VaultTab() {
   };
 
   const handleShare = async (file: DocumentFile) => {
-    if (Platform.OS === 'web') { Alert.alert('Not supported', 'Sharing is not available on web'); return; }
+    if (Platform.OS === 'web') {
+      Alert.alert('Not supported', 'Sharing is not available on web');
+      return;
+    }
+
+    if (!hasLocalFile(file)) {
+      Alert.alert('File unavailable', getMissingLocalFileMessage(file.name));
+      return;
+    }
+
     try {
       const canShare = await Sharing.isAvailableAsync();
-      if (!canShare) { Alert.alert('Not available', 'Sharing is not available on this device'); return; }
-      await Sharing.shareAsync(file.localUri, { mimeType: file.mimeType, dialogTitle: file.name });
+      if (!canShare) {
+        Alert.alert('Not available', 'Sharing is not available on this device');
+        return;
+      }
+
+      await Sharing.shareAsync(file.localUri, {
+        mimeType: file.mimeType,
+        dialogTitle: file.name,
+      });
       await updateFileById(file.id, { lastSharedAt: new Date().toISOString() });
     } catch {
       Alert.alert('Error', 'Could not share file');
@@ -80,40 +111,73 @@ export default function VaultTab() {
       <View style={s.header}>
         <View>
           <Text style={s.headerTitle}>Vault</Text>
-          <Text style={s.headerSub}>{visibleFiles.length} document{visibleFiles.length !== 1 ? 's' : ''}</Text>
+          <Text style={s.headerSub}>
+            {visibleFiles.length} document{visibleFiles.length !== 1 ? 's' : ''}
+          </Text>
         </View>
         <View style={s.headerActions}>
           <TouchableOpacity
-            style={[s.iconBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
+            style={[
+              s.iconBtn,
+              { backgroundColor: colors.muted, borderColor: colors.border },
+            ]}
             onPress={() => setShowPrivate(true)}
           >
-            <Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} />
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={20}
+              color={colors.primary}
+            />
           </TouchableOpacity>
-          <TouchableOpacity style={[s.addBtn, { backgroundColor: colors.primary }]} onPress={() => setShowAdd(true)}>
+          <TouchableOpacity
+            style={[s.addBtn, { backgroundColor: colors.primary }]}
+            onPress={() => setShowAdd(true)}
+          >
             <Ionicons name="add" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
 
-      <SearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Search files, tags, notes..." />
-      <FilterChips chips={FILTER_CHIPS} active={activeFilter} onSelect={setActiveFilter} />
+      <SearchBar
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Search files, tags, notes..."
+      />
+      <FilterChips
+        chips={FILTER_CHIPS}
+        active={activeFilter}
+        onSelect={setActiveFilter}
+      />
 
       {settings.privacyMode && privateCount > 0 && (
-        <TouchableOpacity style={[s.privateBanner, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '30' }]} onPress={() => setShowPrivate(true)}>
+        <TouchableOpacity
+          style={[
+            s.privateBanner,
+            {
+              backgroundColor: colors.primary + '15',
+              borderColor: colors.primary + '30',
+            },
+          ]}
+          onPress={() => setShowPrivate(true)}
+        >
           <Ionicons name="shield-checkmark" size={16} color={colors.primary} />
           <Text style={[s.privateBannerText, { color: colors.primary }]}>
             {privateCount} private file{privateCount !== 1 ? 's' : ''} hidden
           </Text>
-          <Text style={[s.privateBannerLink, { color: colors.primary }]}>Unlock →</Text>
+          <Text style={[s.privateBannerLink, { color: colors.primary }]}>
+            Unlock
+          </Text>
         </TouchableOpacity>
       )}
 
       {loading ? (
-        <View style={s.loader}><ActivityIndicator color={colors.primary} size="large" /></View>
+        <View style={s.loader}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
       ) : (
         <FlatList
           data={visibleFiles}
-          keyExtractor={f => f.id}
+          keyExtractor={(file) => file.id}
           renderItem={({ item }) => (
             <FileCard
               file={item}
@@ -127,7 +191,7 @@ export default function VaultTab() {
             <EmptyState
               icon="folder-open-outline"
               title="No files yet"
-              subtitle="Tap + to add your first document — passport scan, PDF, or photo"
+              subtitle="Tap + to add your first document, PDF, or photo"
             />
           }
           showsVerticalScrollIndicator={false}
@@ -140,17 +204,58 @@ export default function VaultTab() {
   );
 }
 
-const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12, paddingTop: 8 },
-  headerTitle: { fontSize: 26, fontWeight: '700', color: colors.foreground, fontFamily: 'Inter_700Bold' },
-  headerSub: { fontSize: 12, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconBtn: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  addBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  privateBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius, borderWidth: 1 },
-  privateBannerText: { flex: 1, fontSize: 13, fontFamily: 'Inter_500Medium' },
-  privateBannerLink: { fontSize: 13, fontWeight: '700', fontFamily: 'Inter_700Bold' },
-  loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingBottom: 100 },
-});
+const styles = (colors: ReturnType<typeof useColors>, radius: number) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingBottom: 12,
+      paddingTop: 8,
+    },
+    headerTitle: {
+      fontSize: 26,
+      fontWeight: '700',
+      color: colors.foreground,
+      fontFamily: 'Inter_700Bold',
+    },
+    headerSub: {
+      fontSize: 12,
+      color: colors.mutedForeground,
+      fontFamily: 'Inter_400Regular',
+      marginTop: 2,
+    },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    iconBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+    },
+    addBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    privateBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: radius,
+      borderWidth: 1,
+    },
+    privateBannerText: { flex: 1, fontSize: 13, fontFamily: 'Inter_500Medium' },
+    privateBannerLink: { fontSize: 13, fontWeight: '700', fontFamily: 'Inter_700Bold' },
+    loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    list: { paddingBottom: 100 },
+  });

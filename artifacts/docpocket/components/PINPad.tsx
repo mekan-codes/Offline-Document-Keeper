@@ -1,44 +1,107 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Platform, Vibration,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 
-const KEYS = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
+type PINKey =
+  | '1'
+  | '2'
+  | '3'
+  | '4'
+  | '5'
+  | '6'
+  | '7'
+  | '8'
+  | '9'
+  | '0'
+  | ''
+  | 'backspace';
+
+const KEYS: PINKey[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'backspace'];
 
 interface PINPadProps {
   title: string;
   subtitle?: string;
-  onComplete: (pin: string) => void;
+  onComplete: (pin: string) => void | Promise<unknown>;
   onCancel?: () => void;
   error?: string | null;
   maxLength?: number;
+  disabled?: boolean;
 }
 
-export function PINPad({ title, subtitle, onComplete, onCancel, error, maxLength = 6 }: PINPadProps) {
+export function PINPad({
+  title,
+  subtitle,
+  onComplete,
+  onCancel,
+  error,
+  maxLength = 6,
+  disabled = false,
+}: PINPadProps) {
   const colors = useColors();
   const [pin, setPin] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setPin('');
+    setSubmitting(false);
+  }, [title, subtitle, maxLength]);
 
   useEffect(() => {
     if (error) {
       setPin('');
+      setSubmitting(false);
     }
   }, [error]);
 
-  const handleKey = (key: string) => {
-    if (key === '⌫') {
-      setPin(p => p.slice(0, -1));
+  const handleKey = (key: PINKey) => {
+    if (disabled || submitting) return;
+
+    if (key === 'backspace') {
+      if (Platform.OS !== 'web') {
+        void Haptics.selectionAsync();
+      }
+      setPin((current) => current.slice(0, -1));
       return;
     }
+
     if (key === '') return;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const next = pin + key;
-    setPin(next);
-    if (next.length >= maxLength) {
-      setTimeout(() => onComplete(next), 100);
+
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+
+    setPin((current) => {
+      if (current.length >= maxLength) return current;
+
+      const next = `${current}${key}`.slice(0, maxLength);
+      if (next.length === maxLength) {
+        setSubmitting(true);
+        setTimeout(() => {
+          Promise.resolve(onComplete(next))
+            .catch(() => {})
+            .finally(() => {
+              if (mountedRef.current) setSubmitting(false);
+            });
+        }, 80);
+      }
+
+      return next;
+    });
   };
 
   const s = styles(colors);
@@ -58,26 +121,31 @@ export function PINPad({ title, subtitle, onComplete, onCancel, error, maxLength
 
       <View style={s.grid}>
         {KEYS.map((key, i) => (
-          <TouchableOpacity
+          <Pressable
             key={i}
-            style={[s.key, key === '' && s.keyHidden]}
+            style={({ pressed }) => [
+              s.key,
+              key === '' && s.keyHidden,
+              key !== '' && pressed && s.keyPressed,
+              (disabled || submitting) && key !== 'backspace' && s.keyDisabled,
+            ]}
             onPress={() => handleKey(key)}
-            activeOpacity={key === '' ? 1 : 0.6}
-            disabled={key === ''}
+            disabled={key === '' || disabled}
+            hitSlop={6}
           >
-            {key === '⌫' ? (
+            {key === 'backspace' ? (
               <Ionicons name="backspace-outline" size={24} color={colors.foreground} />
             ) : (
               <Text style={s.keyText}>{key}</Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
         ))}
       </View>
 
       {onCancel && (
-        <TouchableOpacity style={s.cancelBtn} onPress={onCancel}>
+        <Pressable style={s.cancelBtn} onPress={onCancel} hitSlop={10}>
           <Text style={s.cancelText}>Cancel</Text>
-        </TouchableOpacity>
+        </Pressable>
       )}
     </View>
   );
@@ -92,7 +160,9 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   dotFilled: { backgroundColor: colors.primary },
   errorText: { color: colors.destructive, fontSize: 13, marginBottom: 8, fontFamily: 'Inter_500Medium' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', width: 264, marginTop: 24 },
-  key: { width: 88, height: 72, alignItems: 'center', justifyContent: 'center' },
+  key: { width: 88, height: 72, alignItems: 'center', justifyContent: 'center', borderRadius: 36 },
+  keyPressed: { backgroundColor: colors.muted },
+  keyDisabled: { opacity: 0.6 },
   keyHidden: { opacity: 0 },
   keyText: { fontSize: 28, fontWeight: '400', color: colors.foreground, fontFamily: 'Inter_400Regular' },
   cancelBtn: { marginTop: 24 },

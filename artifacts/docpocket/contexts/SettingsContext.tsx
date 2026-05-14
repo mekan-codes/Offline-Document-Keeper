@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 import { getSettings, saveSettings } from '@/storage/db';
 import type { AppSettings } from '@/types';
@@ -28,26 +28,31 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT);
   const [loaded, setLoaded] = useState(false);
   const systemScheme = useColorScheme();
+  const settingsRef = useRef<AppSettings>(DEFAULT);
 
   useEffect(() => {
     getSettings().then(s => {
+      settingsRef.current = s;
       setSettings(s);
       setLoaded(true);
     });
   }, []);
 
   const updateSettings = async (updates: Partial<AppSettings>) => {
-    const next = { ...settings, ...updates };
+    const next = { ...settingsRef.current, ...updates };
+    settingsRef.current = next;
     setSettings(next);
     await saveSettings(next);
   };
 
   const refreshSettings = async () => {
     const next = await getSettings();
+    settingsRef.current = next;
     setSettings(next);
   };
 
   const resetSettingsState = () => {
+    settingsRef.current = DEFAULT;
     setSettings(DEFAULT);
   };
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Platform, Alert, TextInput, Modal, FlatList,
+  Platform, Alert, TextInput, Modal, FlatList, KeyboardAvoidingView,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import { makeChecklistItem } from '@/storage/db';
 import { SelectFilesModal } from '@/components/SelectFilesModal';
 import { SelectInfoModal } from '@/components/SelectInfoModal';
 import type { RequiredItem } from '@/types';
+import { getMissingLocalFileMessage, hasLocalFile } from '@/utils/files';
 
 export default function KitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -38,7 +39,7 @@ export default function KitDetailScreen() {
   const [showSelectInfo, setShowSelectInfo] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareSelectedIds, setShareSelectedIds] = useState<string[]>([]);
-  const [showLinkFileForReqId, setShowLinkFileForReqId] = useState<string | null>(null);
+  const [showLinkForReqId, setShowLinkForReqId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!editingReq) setReqNote(kit?.requirementsNote || '');
@@ -53,12 +54,18 @@ export default function KitDetailScreen() {
   }
 
   const kitFiles = kit.fileIds.map(fid => files.find(f => f.id === fid)).filter(Boolean) as typeof files;
+  const accessibleKitFiles = kitFiles.filter(hasLocalFile);
   const kitCards = kit.infoCardIds.map(cid => cards.find(c => c.id === cid)).filter(Boolean) as typeof cards;
+  const linkableFiles = files.filter(hasLocalFile);
+  const linkableInfoCards = cards;
   const requiredItems = kit.requiredItems || [];
 
   const isRequiredItemSatisfied = (ri: RequiredItem): boolean => {
     if (ri.manuallyDone) return true;
-    if (ri.linkedFileId && files.find(f => f.id === ri.linkedFileId)) return true;
+    if (ri.linkedFileId) {
+      const linkedFile = files.find(f => f.id === ri.linkedFileId);
+      if (linkedFile && hasLocalFile(linkedFile)) return true;
+    }
     if (ri.linkedInfoCardId && cards.find(c => c.id === ri.linkedInfoCardId)) return true;
     return false;
   };
@@ -67,7 +74,7 @@ export default function KitDetailScreen() {
   const missingItems = requiredItems.filter(ri => !isRequiredItemSatisfied(ri));
 
   const totalItems = kit.fileIds.length + kit.infoCardIds.length + kit.checklistItems.length + requiredItems.length;
-  const doneItems = kitFiles.length + kitCards.length + kit.checklistItems.filter(i => i.isDone).length + satisfiedRequiredCount;
+  const doneItems = accessibleKitFiles.length + kitCards.length + kit.checklistItems.filter(i => i.isDone).length + satisfiedRequiredCount;
   const progress = totalItems > 0 ? doneItems / totalItems : 0;
   const progressColor = progress >= 1 ? '#10B981' : progress >= 0.5 ? '#F59E0B' : colors.destructive;
 
@@ -85,7 +92,15 @@ export default function KitDetailScreen() {
     Alert.alert('Remove from Kit', 'Remove this file from the kit? The original file will remain in your Vault.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
-        await updateKitById(kit.id, { fileIds: kit.fileIds.filter(fid => fid !== fileId) });
+        const nextRequiredItems = requiredItems.map(ri =>
+          ri.linkedFileId === fileId
+            ? { ...ri, linkedFileId: undefined, manuallyDone: false }
+            : ri
+        );
+        await updateKitById(kit.id, {
+          fileIds: kit.fileIds.filter(fid => fid !== fileId),
+          requiredItems: nextRequiredItems,
+        });
       }},
     ]);
   };
@@ -94,28 +109,48 @@ export default function KitDetailScreen() {
     Alert.alert('Remove from Kit', 'Remove this info card from the kit? The original card will remain in your Info tab.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
-        await updateKitById(kit.id, { infoCardIds: kit.infoCardIds.filter(cid => cid !== cardId) });
+        const nextRequiredItems = requiredItems.map(ri =>
+          ri.linkedInfoCardId === cardId
+            ? { ...ri, linkedInfoCardId: undefined, manuallyDone: false }
+            : ri
+        );
+        await updateKitById(kit.id, {
+          infoCardIds: kit.infoCardIds.filter(cid => cid !== cardId),
+          requiredItems: nextRequiredItems,
+        });
       }},
     ]);
   };
 
-  const handleShareFile = async (uri: string, mimeType: string, name: string) => {
+  const handleShareFile = async (file: (typeof kitFiles)[number]) => {
     if (Platform.OS === 'web') return;
+    if (!hasLocalFile(file)) {
+      Alert.alert('File unavailable', getMissingLocalFileMessage(file.name));
+      return;
+    }
     try {
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(uri, { mimeType, dialogTitle: name });
+      if (canShare) {
+        await Sharing.shareAsync(file.localUri, { mimeType: file.mimeType, dialogTitle: file.name });
+      }
     } catch {}
   };
 
   const handleSharePackage = () => {
-    if (kitFiles.length === 0) { Alert.alert('No files', 'Add files to this kit first before sharing.'); return; }
-    setShareSelectedIds(kitFiles.map(f => f.id));
+    if (accessibleKitFiles.length === 0) {
+      const message = kitFiles.length === 0
+        ? 'Add files to this kit first before sharing.'
+        : 'The linked file records are present, but their local documents are missing. Re-import those files before sharing.';
+      Alert.alert('No shareable files', message);
+      return;
+    }
+    setShareSelectedIds(accessibleKitFiles.map(f => f.id));
     setShowShareModal(true);
   };
 
   const handleShareSelected = async () => {
-    const toShare = kitFiles.filter(f => shareSelectedIds.includes(f.id));
-    if (toShare.length === 0) { Alert.alert('None selected', 'Select at least one file to share.'); return; }
+    const toShare = accessibleKitFiles.filter(f => shareSelectedIds.includes(f.id));
+    if (toShare.length === 0) { Alert.alert('None selected', 'Select at least one available file to share.'); return; }
     if (Platform.OS === 'web') { Alert.alert('Not supported', 'Sharing is not available on web.'); return; }
 
     if (toShare.length > 1) {
@@ -145,9 +180,13 @@ export default function KitDetailScreen() {
     }
   };
 
-  const toggleShareSelect = (fileId: string) => {
+  const toggleShareSelect = (file: (typeof kitFiles)[number]) => {
+    if (!hasLocalFile(file)) {
+      Alert.alert('File unavailable', getMissingLocalFileMessage(file.name));
+      return;
+    }
     setShareSelectedIds(prev =>
-      prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]
+      prev.includes(file.id) ? prev.filter(id => id !== file.id) : [...prev, file.id]
     );
   };
 
@@ -189,10 +228,22 @@ export default function KitDetailScreen() {
 
   const handleLinkFileToRequired = async (reqId: string, fileId: string) => {
     const updated = requiredItems.map(ri =>
-      ri.id === reqId ? { ...ri, linkedFileId: fileId, manuallyDone: false } : ri
+      ri.id === reqId
+        ? { ...ri, linkedFileId: fileId, linkedInfoCardId: undefined, manuallyDone: false }
+        : ri
     );
     await updateKitById(kit.id, { requiredItems: updated, fileIds: Array.from(new Set([...kit.fileIds, fileId])) });
-    setShowLinkFileForReqId(null);
+    setShowLinkForReqId(null);
+  };
+
+  const handleLinkInfoToRequired = async (reqId: string, cardId: string) => {
+    const updated = requiredItems.map(ri =>
+      ri.id === reqId
+        ? { ...ri, linkedFileId: undefined, linkedInfoCardId: cardId, manuallyDone: false }
+        : ri
+    );
+    await updateKitById(kit.id, { requiredItems: updated, infoCardIds: Array.from(new Set([...kit.infoCardIds, cardId])) });
+    setShowLinkForReqId(null);
   };
 
   const handleUnlinkRequired = async (reqId: string) => {
@@ -205,7 +256,10 @@ export default function KitDetailScreen() {
   const s = styles(colors, colors.radius);
 
   return (
-    <View style={[s.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={[s.container, { paddingTop: insets.top }]}
+    >
       <View style={s.topBar}>
         <TouchableOpacity style={s.back} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
@@ -216,7 +270,12 @@ export default function KitDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + (editingReq || showAddCheck ? 160 : 40) }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      >
         <View style={[s.kitHeader, { backgroundColor: kit.color + '15' }]}>
           <View style={[s.kitIconWrap, { backgroundColor: kit.color + '30' }]}>
             <Ionicons name={kit.icon as any} size={32} color={kit.color} />
@@ -267,13 +326,19 @@ export default function KitDetailScreen() {
             <Text style={s.emptyText}>Tap "Add File" to link files from your Vault</Text>
           ) : kitFiles.map(f => {
             const cat = FILE_CATEGORY_CONFIG[f.category];
+            const fileAvailable = hasLocalFile(f);
             return (
               <View key={f.id} style={[s.itemRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={[s.itemIcon, { backgroundColor: cat.color + '20' }]}>
                   <Ionicons name={f.mimeType?.startsWith('image') ? 'image' : 'document-text'} size={20} color={cat.color} />
                 </View>
-                <Text style={s.itemLabel} numberOfLines={1}>{f.name}</Text>
-                <TouchableOpacity style={s.itemAction} onPress={() => handleShareFile(f.localUri, f.mimeType, f.name)}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.itemLabel} numberOfLines={1}>{f.name}</Text>
+                  <Text style={[s.itemSub, { color: fileAvailable ? colors.mutedForeground : colors.destructive }]} numberOfLines={1}>
+                    {fileAvailable ? cat.label : 'Local file missing'}
+                  </Text>
+                </View>
+                <TouchableOpacity style={s.itemAction} onPress={() => handleShareFile(f)}>
                   <Ionicons name="share-outline" size={18} color={colors.primary} />
                 </TouchableOpacity>
                 <TouchableOpacity style={s.itemAction} onPress={() => handleRemoveFile(f.id)}>
@@ -324,6 +389,8 @@ export default function KitDetailScreen() {
             {requiredItems.map(ri => {
               const satisfied = isRequiredItemSatisfied(ri);
               const linkedFile = ri.linkedFileId ? files.find(f => f.id === ri.linkedFileId) : null;
+              const linkedFileAvailable = linkedFile ? hasLocalFile(linkedFile) : false;
+              const linkedInfoCard = ri.linkedInfoCardId ? cards.find(c => c.id === ri.linkedInfoCardId) : null;
               return (
                 <View key={ri.id} style={[s.reqItemRow, { backgroundColor: colors.card, borderColor: satisfied ? '#10B98130' : colors.border }]}>
                   <TouchableOpacity onPress={() => handleToggleRequiredItem(ri.id)} style={[s.reqCheckBox, { borderColor: satisfied ? '#10B981' : colors.border, backgroundColor: satisfied ? '#10B981' : 'transparent' }]}>
@@ -331,20 +398,34 @@ export default function KitDetailScreen() {
                   </TouchableOpacity>
                   <View style={{ flex: 1 }}>
                     <Text style={[s.reqItemLabel, satisfied && s.reqItemLabelDone]}>{ri.label}</Text>
-                    {linkedFile && <Text style={[s.reqItemSub, { color: colors.primary }]} numberOfLines={1}>Linked: {linkedFile.name}</Text>}
-                    {!satisfied && !linkedFile && (
-                      <TouchableOpacity onPress={() => setShowLinkFileForReqId(ri.id)}>
-                        <Text style={[s.reqItemSub, { color: colors.primary }]}>Tap to link a file</Text>
+                    {linkedFile && linkedFileAvailable && (
+                      <Text style={[s.reqItemSub, { color: colors.primary }]} numberOfLines={1}>Linked: {linkedFile.name}</Text>
+                    )}
+                    {linkedFile && !linkedFileAvailable && (
+                      <Text style={[s.reqItemSub, { color: colors.destructive }]} numberOfLines={1}>Linked file missing: {linkedFile.name}</Text>
+                    )}
+                    {ri.linkedFileId && !linkedFile && (
+                      <Text style={[s.reqItemSub, { color: colors.destructive }]} numberOfLines={1}>Linked file missing</Text>
+                    )}
+                    {linkedInfoCard && (
+                      <Text style={[s.reqItemSub, { color: colors.primary }]} numberOfLines={1}>Linked info: {linkedInfoCard.title}</Text>
+                    )}
+                    {ri.linkedInfoCardId && !linkedInfoCard && (
+                      <Text style={[s.reqItemSub, { color: colors.destructive }]} numberOfLines={1}>Linked info card missing</Text>
+                    )}
+                    {!satisfied && !linkedFile && !ri.linkedFileId && !linkedInfoCard && !ri.linkedInfoCardId && (
+                      <TouchableOpacity onPress={() => setShowLinkForReqId(ri.id)}>
+                        <Text style={[s.reqItemSub, { color: colors.primary }]}>Tap to link a file or info card</Text>
                       </TouchableOpacity>
                     )}
                   </View>
-                  {linkedFile && (
+                  {(ri.linkedFileId || ri.linkedInfoCardId) && (
                     <TouchableOpacity style={s.itemAction} onPress={() => handleUnlinkRequired(ri.id)}>
                       <Ionicons name="unlink-outline" size={16} color={colors.mutedForeground} />
                     </TouchableOpacity>
                   )}
-                  {!linkedFile && !ri.manuallyDone && (
-                    <TouchableOpacity style={s.itemAction} onPress={() => setShowLinkFileForReqId(ri.id)}>
+                  {!ri.linkedFileId && !ri.linkedInfoCardId && !ri.manuallyDone && (
+                    <TouchableOpacity style={s.itemAction} onPress={() => setShowLinkForReqId(ri.id)}>
                       <Ionicons name="link-outline" size={16} color={colors.primary} />
                     </TouchableOpacity>
                   )}
@@ -379,7 +460,7 @@ export default function KitDetailScreen() {
               <TextInput style={[s.checkInput, { color: colors.foreground }]} value={newCheckItem}
                 onChangeText={setNewCheckItem} placeholder="New checklist item"
                 placeholderTextColor={colors.mutedForeground} autoFocus returnKeyType="done"
-                onSubmitEditing={handleAddChecklist} />
+                onSubmitEditing={handleAddChecklist} cursorColor={colors.primary} selectionColor={colors.primary} />
               <TouchableOpacity onPress={handleAddChecklist}>
                 <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
               </TouchableOpacity>
@@ -411,6 +492,7 @@ export default function KitDetailScreen() {
                 value={reqNote} onChangeText={setReqNote} multiline
                 placeholder="Add requirements: photo size, file format, deadlines..."
                 placeholderTextColor={colors.mutedForeground} textAlignVertical="top"
+                cursorColor={colors.primary} selectionColor={colors.primary}
               />
               <View style={s.reqActions}>
                 <TouchableOpacity style={[s.reqActionBtn, { borderColor: colors.border }]} onPress={() => { setReqNote(kit.requirementsNote || ''); setEditingReq(false); }}>
@@ -442,7 +524,13 @@ export default function KitDetailScreen() {
         onConfirm={handleAddInfo}
       />
 
-      <Modal visible={showShareModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowShareModal(false)}>
+      <Modal
+        visible={showShareModal}
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+        hardwareAccelerated
+        onRequestClose={() => setShowShareModal(false)}
+      >
         <View style={[s.shareModal, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
           <View style={s.shareModalHeader}>
             <TouchableOpacity onPress={() => setShowShareModal(false)}>
@@ -463,16 +551,20 @@ export default function KitDetailScreen() {
             renderItem={({ item: f }) => {
               const cat = FILE_CATEGORY_CONFIG[f.category];
               const selected = shareSelectedIds.includes(f.id);
+              const fileAvailable = hasLocalFile(f);
               return (
                 <TouchableOpacity
-                  style={[s.shareFileRow, { backgroundColor: selected ? colors.primary + '12' : colors.card, borderColor: selected ? colors.primary : colors.border }]}
-                  onPress={() => toggleShareSelect(f.id)}
+                  style={[s.shareFileRow, { backgroundColor: selected ? colors.primary + '12' : colors.card, borderColor: selected ? colors.primary : colors.border, opacity: fileAvailable ? 1 : 0.6 }]}
+                  onPress={() => toggleShareSelect(f)}
                   activeOpacity={0.7}
                 >
                   <View style={[s.itemIcon, { backgroundColor: cat.color + '20' }]}>
                     <Ionicons name={f.mimeType?.startsWith('image') ? 'image' : 'document-text'} size={18} color={cat.color} />
                   </View>
-                  <Text style={[s.itemLabel, { flex: 1 }]} numberOfLines={1}>{f.name}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.itemLabel} numberOfLines={1}>{f.name}</Text>
+                    <Text style={[s.itemSub, { color: fileAvailable ? colors.mutedForeground : colors.destructive }]}>{fileAvailable ? cat.label : 'Local file missing'}</Text>
+                  </View>
                   <View style={[s.shareCheckBox, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primary : 'transparent' }]}>
                     {selected && <Ionicons name="checkmark" size={13} color="#fff" />}
                   </View>
@@ -483,29 +575,39 @@ export default function KitDetailScreen() {
         </View>
       </Modal>
 
-      <Modal visible={showLinkFileForReqId !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowLinkFileForReqId(null)}>
+      <Modal
+        visible={showLinkForReqId !== null}
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+        hardwareAccelerated
+        onRequestClose={() => setShowLinkForReqId(null)}
+      >
         <View style={[s.shareModal, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
           <View style={s.shareModalHeader}>
-            <TouchableOpacity onPress={() => setShowLinkFileForReqId(null)}>
+            <TouchableOpacity onPress={() => setShowLinkForReqId(null)}>
               <Ionicons name="close" size={24} color={colors.foreground} />
             </TouchableOpacity>
-            <Text style={s.shareModalTitle}>Link a File</Text>
+            <Text style={s.shareModalTitle}>Link Required Item</Text>
             <View style={{ width: 60 }} />
           </View>
           <Text style={[s.shareModalSub, { color: colors.mutedForeground }]}>
-            Select a file from your Vault to link to this required item.
+            Choose a file or info card to satisfy this required item.
           </Text>
-          <FlatList
-            data={files}
-            keyExtractor={f => f.id}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
-            ListEmptyComponent={<Text style={[s.emptyText, { padding: 20 }]}>No files in Vault yet.</Text>}
-            renderItem={({ item: f }) => {
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}>
+            {linkableFiles.length === 0 && linkableInfoCards.length === 0 && (
+              <Text style={[s.emptyText, { padding: 20 }]}>No files or info cards in DocPocket yet.</Text>
+            )}
+
+            {linkableFiles.length > 0 && (
+              <Text style={[s.sectionTitle, { marginTop: 8, marginBottom: 8 }]}>Files</Text>
+            )}
+            {linkableFiles.map(f => {
               const cat = FILE_CATEGORY_CONFIG[f.category];
               return (
                 <TouchableOpacity
+                  key={`file-${f.id}`}
                   style={[s.shareFileRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => showLinkFileForReqId && handleLinkFileToRequired(showLinkFileForReqId, f.id)}
+                  onPress={() => showLinkForReqId && handleLinkFileToRequired(showLinkForReqId, f.id)}
                   activeOpacity={0.7}
                 >
                   <View style={[s.itemIcon, { backgroundColor: cat.color + '20' }]}>
@@ -518,11 +620,35 @@ export default function KitDetailScreen() {
                   <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
                 </TouchableOpacity>
               );
-            }}
-          />
+            })}
+
+            {linkableInfoCards.length > 0 && (
+              <Text style={[s.sectionTitle, { marginTop: 14, marginBottom: 8 }]}>Info Cards</Text>
+            )}
+            {linkableInfoCards.map(c => {
+              const cat = INFO_CATEGORY_CONFIG[c.category];
+              return (
+                <TouchableOpacity
+                  key={`info-${c.id}`}
+                  style={[s.shareFileRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+                  onPress={() => showLinkForReqId && handleLinkInfoToRequired(showLinkForReqId, c.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[s.catDot, { backgroundColor: cat.color }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.itemLabel} numberOfLines={1}>{c.title}</Text>
+                    <Text style={[s.itemSub, { color: colors.mutedForeground }]} numberOfLines={1}>
+                      {settings.privacyMode && c.isSensitive ? '••••••' : c.value}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

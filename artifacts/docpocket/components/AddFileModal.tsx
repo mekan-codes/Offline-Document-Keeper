@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Platform,
+  ScrollView, Alert, ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -12,6 +12,7 @@ import { useColors } from '@/hooks/useColors';
 import { useVault } from '@/contexts/VaultContext';
 import { FILE_CATEGORY_CONFIG } from '@/constants/categories';
 import type { FileCategory } from '@/types';
+import { parseStoredDate } from '@/utils/date';
 
 const CATEGORIES: FileCategory[] = ['identity', 'visa', 'travel', 'school', 'medical', 'photos', 'other'];
 
@@ -106,6 +107,11 @@ export function AddFileModal({ visible, onClose }: AddFileModalProps) {
   const handleSave = async () => {
     if (!pickedUri) return;
     if (!name.trim()) { Alert.alert('Name required', 'Please enter a name for this file'); return; }
+    const normalizedExpiry = expiryDate.trim();
+    if (normalizedExpiry && !parseStoredDate(normalizedExpiry)) {
+      Alert.alert('Invalid date', 'Enter the expiry date as YYYY-MM-DD.');
+      return;
+    }
     setSaving(true);
     try {
       const dir = (FileSystem as any).documentDirectory + 'docpocket/';
@@ -125,7 +131,7 @@ export function AddFileModal({ visible, onClose }: AddFileModalProps) {
         tags: [],
         note,
         requirementsNote: '',
-        expiryDate: expiryDate || undefined,
+        expiryDate: normalizedExpiry || undefined,
         isFavorite,
         isSensitive,
       });
@@ -140,8 +146,17 @@ export function AddFileModal({ visible, onClose }: AddFileModalProps) {
   const s = styles(colors, colors.radius);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <View style={[s.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+      hardwareAccelerated
+      onRequestClose={handleClose}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[s.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}
+      >
         <View style={s.header}>
           <TouchableOpacity onPress={step === 'details' ? () => setStep('pick') : handleClose}>
             <Ionicons name={step === 'details' ? 'arrow-back' : 'close'} size={24} color={colors.foreground} />
@@ -174,7 +189,12 @@ export function AddFileModal({ visible, onClose }: AddFileModalProps) {
             ))}
           </View>
         ) : (
-          <ScrollView style={s.form} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={s.form}
+            contentContainerStyle={[s.formContent, { paddingBottom: insets.bottom + 140 }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
             <View style={s.pickedFile}>
               <Ionicons name="document" size={20} color={colors.primary} />
               <Text style={s.pickedFileName} numberOfLines={1}>{pickedName}</Text>
@@ -182,7 +202,8 @@ export function AddFileModal({ visible, onClose }: AddFileModalProps) {
 
             <Text style={s.label}>Name *</Text>
             <TextInput style={[s.input, { borderColor: colors.border, color: colors.foreground }]}
-              value={name} onChangeText={setName} placeholder="Document name" placeholderTextColor={colors.mutedForeground} />
+              value={name} onChangeText={setName} placeholder="Document name" placeholderTextColor={colors.mutedForeground}
+              cursorColor={colors.primary} selectionColor={colors.primary} />
 
             <Text style={s.label}>Category</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.catRow}>
@@ -201,11 +222,12 @@ export function AddFileModal({ visible, onClose }: AddFileModalProps) {
             <Text style={s.label}>Note (optional)</Text>
             <TextInput style={[s.input, s.textarea, { borderColor: colors.border, color: colors.foreground }]}
               value={note} onChangeText={setNote} placeholder="Add a note..." placeholderTextColor={colors.mutedForeground}
-              multiline numberOfLines={3} textAlignVertical="top" />
+              multiline numberOfLines={3} textAlignVertical="top" cursorColor={colors.primary} selectionColor={colors.primary} />
 
             <Text style={s.label}>Expiry Date (optional, YYYY-MM-DD)</Text>
             <TextInput style={[s.input, { borderColor: colors.border, color: colors.foreground }]}
-              value={expiryDate} onChangeText={setExpiryDate} placeholder="2027-01-15" placeholderTextColor={colors.mutedForeground} />
+              value={expiryDate} onChangeText={setExpiryDate} placeholder="2027-01-15" placeholderTextColor={colors.mutedForeground}
+              keyboardType="numbers-and-punctuation" cursorColor={colors.primary} selectionColor={colors.primary} />
 
             <View style={s.toggleRow}>
               <View>
@@ -229,7 +251,7 @@ export function AddFileModal({ visible, onClose }: AddFileModalProps) {
             <View style={{ height: 80 }} />
           </ScrollView>
         )}
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -244,7 +266,8 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   pickOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, padding: 16, borderRadius: radius, gap: 14, borderWidth: 1, borderColor: colors.border },
   pickIconWrap: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   pickLabel: { flex: 1, fontSize: 15, fontWeight: '500', color: colors.foreground, fontFamily: 'Inter_500Medium' },
-  form: { flex: 1, padding: 20 },
+  form: { flex: 1 },
+  formContent: { padding: 20 },
   pickedFile: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary + '15', padding: 12, borderRadius: radius, marginBottom: 20 },
   pickedFileName: { flex: 1, fontSize: 13, color: colors.primary, fontFamily: 'Inter_500Medium' },
   label: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginBottom: 6, marginTop: 16 },

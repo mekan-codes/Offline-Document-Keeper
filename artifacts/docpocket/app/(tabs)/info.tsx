@@ -4,6 +4,7 @@ import {
   Platform, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useInfo } from '@/contexts/InfoContext';
@@ -52,7 +53,8 @@ export default function InfoTab() {
   };
 
   const handleFavorite = (card: InfoCard) => {
-    updateCard(card.id, { isFavorite: !card.isFavorite });
+    if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void updateCard(card.id, { isFavorite: !card.isFavorite });
   };
 
   const handleAddCardToKit = async (kitId: string) => {

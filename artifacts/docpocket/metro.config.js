@@ -7,7 +7,8 @@ const workspaceRoot = path.resolve(projectRoot, "../..");
 const config = getDefaultConfig(projectRoot);
 
 const watchFolders = new Set([...(config.watchFolders ?? []), workspaceRoot]);
-const virtualStore = process.env.PNPM_VIRTUAL_STORE_DIR;
+const virtualStore =
+  process.env.PNPM_VIRTUAL_STORE_DIR || path.resolve(workspaceRoot, ".pnpm");
 
 if (virtualStore && fs.existsSync(virtualStore)) {
   watchFolders.add(virtualStore);

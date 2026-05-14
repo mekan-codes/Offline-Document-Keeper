@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { getKits, addKit, updateKit, deleteKit } from '@/storage/db';
-import type { Kit, ChecklistItem } from '@/types';
+import React, { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { addKit, deleteKit, getKits, updateKit } from '@/storage/db';
+import type { ChecklistItem, Kit } from '@/types';
 
 interface KitsContextValue {
   kits: Kit[];
@@ -14,13 +14,24 @@ interface KitsContextValue {
 
 const KitsContext = createContext<KitsContextValue | null>(null);
 
+function sortKits(kits: Kit[]): Kit[] {
+  return [...kits].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
+
 export function KitsProvider({ children }: { children: ReactNode }) {
-  const [kits, setKits] = useState<Kit[]>([]);
+  const [kits, setKitsState] = useState<Kit[]>([]);
   const [loading, setLoading] = useState(true);
+  const kitsRef = useRef<Kit[]>([]);
+
+  const setKits = (next: Kit[]) => {
+    kitsRef.current = next;
+    setKitsState(next);
+  };
 
   const refreshKits = async () => {
-    const k = await getKits();
-    setKits(k.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
+    setKits(sortKits(await getKits()));
   };
 
   useEffect(() => {
@@ -29,28 +40,49 @@ export function KitsProvider({ children }: { children: ReactNode }) {
 
   const addNewKit = async (data: Omit<Kit, 'id' | 'createdAt' | 'updatedAt'>) => {
     const kit = await addKit(data);
-    await refreshKits();
+    setKits(sortKits([...kitsRef.current, kit]));
     return kit;
   };
 
   const updateKitById = async (id: string, updates: Partial<Kit>) => {
-    await updateKit(id, updates);
-    await refreshKits();
+    const previous = kitsRef.current;
+    const optimistic = sortKits(
+      previous.map((kit) =>
+        kit.id === id
+          ? { ...kit, ...updates, updatedAt: new Date().toISOString() }
+          : kit,
+      ),
+    );
+    setKits(optimistic);
+
+    try {
+      await updateKit(id, updates);
+    } catch (error) {
+      setKits(previous);
+      throw error;
+    }
   };
 
   const deleteKitById = async (id: string) => {
-    await deleteKit(id);
-    await refreshKits();
+    const previous = kitsRef.current;
+    setKits(previous.filter((kit) => kit.id !== id));
+
+    try {
+      await deleteKit(id);
+    } catch (error) {
+      setKits(previous);
+      throw error;
+    }
   };
 
   const toggleChecklistItem = async (kitId: string, itemId: string) => {
-    const kit = kits.find(k => k.id === kitId);
+    const kit = kitsRef.current.find(k => k.id === kitId);
     if (!kit) return;
-    const items = kit.checklistItems.map(item =>
-      item.id === itemId ? { ...item, isDone: !item.isDone } : item
+
+    const checklistItems: ChecklistItem[] = kit.checklistItems.map(item =>
+      item.id === itemId ? { ...item, isDone: !item.isDone } : item,
     );
-    await updateKit(kitId, { checklistItems: items });
-    await refreshKits();
+    await updateKitById(kitId, { checklistItems });
   };
 
   const value = useMemo(() => ({

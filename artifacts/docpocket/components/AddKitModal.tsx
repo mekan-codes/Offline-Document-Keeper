@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert,
+  Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -180,8 +181,17 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
   const s = styles(colors, colors.radius);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[s.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+      hardwareAccelerated
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[s.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}
+      >
         <View style={s.header}>
           <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color={colors.foreground} /></TouchableOpacity>
           <Text style={s.headerTitle}>New Kit</Text>
@@ -190,7 +200,12 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={s.form} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={s.form}
+          contentContainerStyle={[s.formContent, { paddingBottom: insets.bottom + 140 }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           <View style={s.preview}>
             <View style={[s.previewIcon, { backgroundColor: color + '22' }]}>
               <Ionicons name={icon as any} size={36} color={color} />
@@ -208,7 +223,7 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
           <Text style={s.label}>Name *</Text>
           <TextInput style={[s.input, { borderColor: colors.border, color: colors.foreground }]}
             value={name} onChangeText={setName} placeholder="e.g. Thailand Visa, School Submission"
-            placeholderTextColor={colors.mutedForeground} />
+            placeholderTextColor={colors.mutedForeground} cursorColor={colors.primary} selectionColor={colors.primary} />
 
           <Text style={s.label}>Quick Templates</Text>
           <Text style={s.labelSub}>Select a template to pre-fill checklist, required items, and requirements</Text>
@@ -248,7 +263,7 @@ export function AddKitModal({ visible, onClose }: AddKitModalProps) {
 
           <View style={{ height: 60 }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -258,7 +273,8 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitle: { fontSize: 17, fontWeight: '600', color: colors.foreground, fontFamily: 'Inter_600SemiBold' },
   saveBtn: { fontSize: 16, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
-  form: { flex: 1, padding: 20 },
+  form: { flex: 1 },
+  formContent: { padding: 20 },
   preview: { alignItems: 'center', marginBottom: 8, marginTop: 8, gap: 8 },
   previewIcon: { width: 80, height: 80, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   templateBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },

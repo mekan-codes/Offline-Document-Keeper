@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Modal, View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Platform, Alert, AppState, AppStateStatus,
+  Modal,
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  Alert,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
@@ -17,6 +25,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { PINPad } from './PINPad';
 import { FILE_CATEGORY_CONFIG, INFO_CATEGORY_CONFIG } from '@/constants/categories';
 import { verifyPin } from '@/storage/pinUtils';
+import { getMissingLocalFileMessage, hasLocalFile } from '@/utils/files';
 
 interface PrivateVaultModalProps {
   visible: boolean;
@@ -40,30 +49,32 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
   const [authenticated, setAuthenticated] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
 
-  const sensitiveFiles = files.filter(f => f.isSensitive);
-  const sensitiveCards = cards.filter(c => c.isSensitive);
+  const sensitiveFiles = files.filter((file) => file.isSensitive);
+  const sensitiveCards = cards.filter((card) => card.isSensitive);
 
   useEffect(() => {
     if (visible) {
       setAuthenticated(false);
       setPinError(null);
       if (isPinSetup && hasBiometrics && settings.biometricEnabled && Platform.OS !== 'web') {
-        tryBiometrics();
+        void tryBiometrics();
       }
     } else {
       setAuthenticated(false);
       setPinError(null);
     }
-  }, [visible]);
+  }, [visible, isPinSetup, hasBiometrics, settings.biometricEnabled]);
 
   useEffect(() => {
     if (!visible) return;
+
     const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
       if (state === 'background' || state === 'inactive') {
         setAuthenticated(false);
         setPinError(null);
       }
     });
+
     return () => sub.remove();
   }, [visible]);
 
@@ -83,10 +94,16 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
   };
 
   const handleShare = async (uri: string, mimeType: string, name: string) => {
-    if (Platform.OS === 'web') { Alert.alert('Not supported', 'Sharing is not available on web.'); return; }
+    if (Platform.OS === 'web') {
+      Alert.alert('Not supported', 'Sharing is not available on web.');
+      return;
+    }
+
     try {
       const canShare = await Sharing.isAvailableAsync();
-      if (canShare) await Sharing.shareAsync(uri, { mimeType, dialogTitle: name });
+      if (canShare) {
+        await Sharing.shareAsync(uri, { mimeType, dialogTitle: name });
+      }
     } catch {}
   };
 
@@ -94,13 +111,20 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await Clipboard.setStringAsync(value);
     if (settings.clearClipboardAfterSeconds > 0) {
-      setTimeout(async () => { try { await Clipboard.setStringAsync(''); } catch {} }, settings.clearClipboardAfterSeconds * 1000);
+      setTimeout(async () => {
+        try {
+          await Clipboard.setStringAsync('');
+        } catch {}
+      }, settings.clearClipboardAfterSeconds * 1000);
     }
   };
 
   const handleOpenFile = (fileId: string) => {
     handleClose();
-    setTimeout(() => router.push({ pathname: '/file/[id]', params: { id: fileId, private: '1' } }), 300);
+    setTimeout(
+      () => router.push({ pathname: '/file/[id]', params: { id: fileId, private: '1' } }),
+      300,
+    );
   };
 
   const handleClose = () => {
@@ -109,16 +133,42 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
     onClose();
   };
 
-  const listData: ListItem[] = authenticated ? [
-    { type: 'section', title: `Private Files (${sensitiveFiles.length})`, key: 'sec-files' },
-    ...(sensitiveFiles.length === 0
-      ? [{ type: 'empty' as const, message: 'No private files. Mark files as Sensitive in their detail page.', key: 'empty-files' }]
-      : sensitiveFiles.map(f => ({ type: 'file' as const, item: f, key: `f_${f.id}` }))),
-    { type: 'section', title: `Private Info Cards (${sensitiveCards.length})`, key: 'sec-info' },
-    ...(sensitiveCards.length === 0
-      ? [{ type: 'empty' as const, message: 'No private info cards. Mark info cards as Sensitive.', key: 'empty-info' }]
-      : sensitiveCards.map(c => ({ type: 'info' as const, item: c, key: `i_${c.id}` }))),
-  ] : [];
+  const listData: ListItem[] = authenticated
+    ? [
+        { type: 'section', title: `Private Files (${sensitiveFiles.length})`, key: 'sec-files' },
+        ...(sensitiveFiles.length === 0
+          ? [
+              {
+                type: 'empty' as const,
+                message: 'No private files. Mark files as Sensitive in their detail page.',
+                key: 'empty-files',
+              },
+            ]
+          : sensitiveFiles.map((file) => ({
+              type: 'file' as const,
+              item: file,
+              key: `f_${file.id}`,
+            }))),
+        {
+          type: 'section',
+          title: `Private Info Cards (${sensitiveCards.length})`,
+          key: 'sec-info',
+        },
+        ...(sensitiveCards.length === 0
+          ? [
+              {
+                type: 'empty' as const,
+                message: 'No private info cards. Mark info cards as Sensitive.',
+                key: 'empty-info',
+              },
+            ]
+          : sensitiveCards.map((card) => ({
+              type: 'info' as const,
+              item: card,
+              key: `i_${card.id}`,
+            }))),
+      ]
+    : [];
 
   const s = styles(colors, colors.radius);
 
@@ -151,7 +201,7 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
               error={pinError}
             />
             {hasBiometrics && settings.biometricEnabled && Platform.OS !== 'web' && (
-              <TouchableOpacity style={s.bioBtn} onPress={tryBiometrics}>
+              <TouchableOpacity style={s.bioBtn} onPress={() => void tryBiometrics()}>
                 <Ionicons name="finger-print" size={30} color={colors.primary} />
                 <Text style={[s.bioText, { color: colors.primary }]}>Use Biometrics</Text>
               </TouchableOpacity>
@@ -159,66 +209,93 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
           </View>
         ) : (
           <>
-            {(sensitiveFiles.length === 0 && sensitiveCards.length === 0) ? (
+            {sensitiveFiles.length === 0 && sensitiveCards.length === 0 ? (
               <View style={s.emptyVault}>
                 <Ionicons name="shield-outline" size={48} color={colors.mutedForeground} />
                 <Text style={s.emptyTitle}>Private vault is empty</Text>
-                <Text style={s.emptySub}>Mark files or info cards as Sensitive to store them here.</Text>
+                <Text style={s.emptySub}>
+                  Mark files or info cards as Sensitive to store them here.
+                </Text>
               </View>
             ) : (
               <FlatList
                 data={listData}
-                keyExtractor={item => item.key}
+                keyExtractor={(item) => item.key}
                 contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
                 renderItem={({ item }) => {
-                  if (item.type === 'section') return (
-                    <Text style={s.sectionTitle}>{item.title}</Text>
-                  );
-                  if (item.type === 'empty') return (
-                    <Text style={s.emptyText}>{item.message}</Text>
-                  );
+                  if (item.type === 'section') {
+                    return <Text style={s.sectionTitle}>{item.title}</Text>;
+                  }
+
+                  if (item.type === 'empty') {
+                    return <Text style={s.emptyText}>{item.message}</Text>;
+                  }
+
                   if (item.type === 'file') {
-                    const f = item.item;
-                    const cat = FILE_CATEGORY_CONFIG[f.category];
+                    const file = item.item;
+                    const category = FILE_CATEGORY_CONFIG[file.category];
+                    const fileAvailable = hasLocalFile(file);
+
                     return (
                       <TouchableOpacity
                         style={[s.itemRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-                        onPress={() => handleOpenFile(f.id)}
+                        onPress={() => handleOpenFile(file.id)}
                         activeOpacity={0.7}
                       >
-                        <View style={[s.itemIcon, { backgroundColor: cat.color + '20' }]}>
-                          <Ionicons name={f.mimeType?.startsWith('image') ? 'image' : 'document-text'} size={20} color={cat.color} />
+                        <View style={[s.itemIcon, { backgroundColor: category.color + '20' }]}>
+                          <Ionicons
+                            name={file.mimeType?.startsWith('image') ? 'image' : 'document-text'}
+                            size={20}
+                            color={category.color}
+                          />
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={s.itemLabel} numberOfLines={1}>{f.name}</Text>
-                          <Text style={s.itemMeta}>{cat.label} • {(f.sizeBytes / 1024).toFixed(0)} KB</Text>
+                          <Text style={s.itemLabel} numberOfLines={1}>
+                            {file.name}
+                          </Text>
+                          <Text style={s.itemMeta}>
+                            {fileAvailable
+                              ? `${category.label} | ${(file.sizeBytes / 1024).toFixed(0)} KB`
+                              : 'Local file missing'}
+                          </Text>
                         </View>
                         <TouchableOpacity
                           style={s.actionBtn}
-                          onPress={(e) => { e.stopPropagation(); handleShare(f.localUri, f.mimeType, f.name); }}
+                          onPress={() => {
+                            if (!fileAvailable) {
+                              Alert.alert(
+                                'File unavailable',
+                                getMissingLocalFileMessage(file.name),
+                              );
+                              return;
+                            }
+                            void handleShare(file.localUri, file.mimeType, file.name);
+                          }}
                         >
                           <Ionicons name="share-outline" size={18} color={colors.primary} />
                         </TouchableOpacity>
                       </TouchableOpacity>
                     );
                   }
-                  if (item.type === 'info') {
-                    const c = item.item;
-                    const cat = INFO_CATEGORY_CONFIG[c.category];
-                    return (
-                      <View style={[s.itemRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <View style={[s.catDot, { backgroundColor: cat.color }]} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={s.itemLabel} numberOfLines={1}>{c.title}</Text>
-                          <Text style={s.itemValue} numberOfLines={1}>{c.value}</Text>
-                        </View>
-                        <TouchableOpacity style={s.actionBtn} onPress={() => handleCopy(c.value)}>
-                          <Ionicons name="copy-outline" size={18} color={colors.primary} />
-                        </TouchableOpacity>
+
+                  const card = item.item;
+                  const category = INFO_CATEGORY_CONFIG[card.category];
+                  return (
+                    <View style={[s.itemRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                      <View style={[s.catDot, { backgroundColor: category.color }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.itemLabel} numberOfLines={1}>
+                          {card.title}
+                        </Text>
+                        <Text style={s.itemValue} numberOfLines={1}>
+                          {card.value}
+                        </Text>
                       </View>
-                    );
-                  }
-                  return null;
+                      <TouchableOpacity style={s.actionBtn} onPress={() => void handleCopy(card.value)}>
+                        <Ionicons name="copy-outline" size={18} color={colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  );
                 }}
               />
             )}
@@ -229,27 +306,109 @@ export function PrivateVaultModal({ visible, onClose }: PrivateVaultModalProps) 
   );
 }
 
-const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: colors.foreground, fontFamily: 'Inter_700Bold' },
-  lockBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.muted, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  lockText: { fontSize: 13, color: colors.mutedForeground, fontFamily: 'Inter_500Medium' },
-  authArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 60 },
-  pinRequired: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
-  bioBtn: { marginTop: 28, alignItems: 'center', gap: 8 },
-  bioText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
-  emptyVault: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.foreground, fontFamily: 'Inter_600SemiBold' },
-  emptySub: { fontSize: 14, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: 21 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: colors.mutedForeground, fontFamily: 'Inter_700Bold', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 20, marginBottom: 8, marginHorizontal: 16 },
-  emptyText: { fontSize: 13, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', fontStyle: 'italic', paddingHorizontal: 16, marginBottom: 8 },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius, borderWidth: 1, marginHorizontal: 16, marginBottom: 6 },
-  itemIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  catDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
-  itemLabel: { fontSize: 14, fontWeight: '500', color: colors.foreground, fontFamily: 'Inter_500Medium' },
-  itemMeta: { fontSize: 11, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', marginTop: 1 },
-  itemValue: { fontSize: 13, color: colors.foreground, fontFamily: 'Inter_400Regular', marginTop: 1 },
-  actionBtn: { padding: 8 },
-});
+const styles = (colors: ReturnType<typeof useColors>, radius: number) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.foreground,
+      fontFamily: 'Inter_700Bold',
+    },
+    lockBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: colors.muted,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+    },
+    lockText: { fontSize: 13, color: colors.mutedForeground, fontFamily: 'Inter_500Medium' },
+    authArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 60 },
+    pinRequired: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 40,
+      gap: 12,
+    },
+    bioBtn: { marginTop: 28, alignItems: 'center', gap: 8 },
+    bioText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
+    emptyVault: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 40,
+      gap: 12,
+    },
+    emptyTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: colors.foreground,
+      fontFamily: 'Inter_600SemiBold',
+    },
+    emptySub: {
+      fontSize: 14,
+      color: colors.mutedForeground,
+      fontFamily: 'Inter_400Regular',
+      textAlign: 'center',
+      lineHeight: 21,
+    },
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.mutedForeground,
+      fontFamily: 'Inter_700Bold',
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      marginTop: 20,
+      marginBottom: 8,
+      marginHorizontal: 16,
+    },
+    emptyText: {
+      fontSize: 13,
+      color: colors.mutedForeground,
+      fontFamily: 'Inter_400Regular',
+      fontStyle: 'italic',
+      paddingHorizontal: 16,
+      marginBottom: 8,
+    },
+    itemRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      borderRadius: radius,
+      borderWidth: 1,
+      marginHorizontal: 16,
+      marginBottom: 6,
+    },
+    itemIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    catDot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+    itemLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.foreground,
+      fontFamily: 'Inter_500Medium',
+    },
+    itemMeta: { fontSize: 11, color: colors.mutedForeground, fontFamily: 'Inter_400Regular', marginTop: 1 },
+    itemValue: { fontSize: 13, color: colors.foreground, fontFamily: 'Inter_400Regular', marginTop: 1 },
+    actionBtn: { padding: 8 },
+  });

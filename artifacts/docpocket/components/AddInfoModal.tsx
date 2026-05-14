@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, Platform,
+  ScrollView, Alert, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -61,8 +61,17 @@ export function AddInfoModal({ visible, onClose, editCard }: AddInfoModalProps) 
   const s = styles(colors, colors.radius);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={[s.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+      hardwareAccelerated
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={[s.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}
+      >
         <View style={s.header}>
           <TouchableOpacity onPress={onClose}>
             <Ionicons name="close" size={24} color={colors.foreground} />
@@ -73,16 +82,21 @@ export function AddInfoModal({ visible, onClose, editCard }: AddInfoModalProps) 
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={s.form} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={s.form}
+          contentContainerStyle={[s.formContent, { paddingBottom: insets.bottom + 140 }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           <Text style={s.label}>Title *</Text>
           <TextInput style={[s.input, { borderColor: colors.border, color: colors.foreground }]}
             value={title} onChangeText={setTitle} placeholder="e.g. Passport Number, Phone, Email"
-            placeholderTextColor={colors.mutedForeground} />
+            placeholderTextColor={colors.mutedForeground} cursorColor={colors.primary} selectionColor={colors.primary} />
 
           <Text style={s.label}>Value *</Text>
           <TextInput style={[s.input, { borderColor: colors.border, color: colors.foreground }]}
             value={value} onChangeText={setValue} placeholder="Enter the value"
-            placeholderTextColor={colors.mutedForeground} multiline />
+            placeholderTextColor={colors.mutedForeground} multiline cursorColor={colors.primary} selectionColor={colors.primary} />
 
           <Text style={s.label}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.catRow}>
@@ -115,7 +129,7 @@ export function AddInfoModal({ visible, onClose, editCard }: AddInfoModalProps) 
           ))}
           <View style={{ height: 80 }} />
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -125,7 +139,8 @@ const styles = (colors: ReturnType<typeof useColors>, radius: number) => StyleSh
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitle: { fontSize: 17, fontWeight: '600', color: colors.foreground, fontFamily: 'Inter_600SemiBold' },
   saveBtn: { fontSize: 16, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
-  form: { flex: 1, padding: 20 },
+  form: { flex: 1 },
+  formContent: { padding: 20 },
   label: { fontSize: 13, fontWeight: '600', color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold', marginBottom: 6, marginTop: 16 },
   input: { borderWidth: 1, borderRadius: radius, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, fontFamily: 'Inter_400Regular', backgroundColor: colors.card },
   catRow: { gap: 8, paddingVertical: 4 },

@@ -55,6 +55,18 @@ function stripProtocol(domain) {
 }
 
 function getDeploymentDomain() {
+  if (process.env.DEPLOYMENT_ORIGIN) {
+    return stripProtocol(process.env.DEPLOYMENT_ORIGIN);
+  }
+
+  if (process.env.PUBLIC_URL) {
+    return stripProtocol(process.env.PUBLIC_URL);
+  }
+
+  if (process.env.APP_ORIGIN) {
+    return stripProtocol(process.env.APP_ORIGIN);
+  }
+
   if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
     return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
   }
@@ -68,7 +80,7 @@ function getDeploymentDomain() {
   }
 
   console.error(
-    "ERROR: No deployment domain found. Set REPLIT_INTERNAL_APP_DOMAIN, REPLIT_DEV_DOMAIN, or EXPO_PUBLIC_DOMAIN",
+    "ERROR: No deployment origin found. Set DEPLOYMENT_ORIGIN, PUBLIC_URL, APP_ORIGIN, REPLIT_INTERNAL_APP_DOMAIN, REPLIT_DEV_DOMAIN, or EXPO_PUBLIC_DOMAIN",
   );
   process.exit(1);
 }
